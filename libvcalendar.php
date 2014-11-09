@@ -49,11 +49,13 @@ class libvcalendar implements Iterator
     private $forward_exceptions;
     private $vhead;
     private $fp;
+    private $vtimezones = array();
 
     public $method;
     public $agent = '';
     public $objects = array();
     public $freebusy = array();
+
 
     /**
      * Default constructor
@@ -105,6 +107,7 @@ class libvcalendar implements Iterator
         $this->method = '';
         $this->objects = array();
         $this->freebusy = array();
+        $this->vtimezones = array();
         $this->iteratorkey = 0;
 
         if ($this->fp) {
@@ -432,15 +435,17 @@ class libvcalendar implements Iterator
                 if (!$params['INTERVAL'])
                     $params['INTERVAL'] = 1;
 
-                $event['recurrence'] = $params;
+                $event['recurrence'] = array_filter($params);
                 break;
 
             case 'EXDATE':
-                $event['recurrence']['EXDATE'] = array_merge((array)$event['recurrence']['EXDATE'], self::convert_datetime($prop, true));
+                if (!empty($prop->value))
+                    $event['recurrence']['EXDATE'] = array_merge((array)$event['recurrence']['EXDATE'], self::convert_datetime($prop, true));
                 break;
 
             case 'RDATE':
-                $event['recurrence']['RDATE'] = array_merge((array)$event['recurrence']['RDATE'], self::convert_datetime($prop, true));
+                if (!empty($prop->value))
+                    $event['recurrence']['RDATE'] = array_merge((array)$event['recurrence']['RDATE'], self::convert_datetime($prop, true));
                 break;
 
             case 'RECURRENCE-ID':
@@ -775,13 +780,26 @@ class libvcalendar implements Iterator
      * @param string Property name
      * @param object DateTime
      */
-    public static function datetime_prop($name, $dt, $utc = false, $dateonly = null)
+    public function datetime_prop($name, $dt, $utc = false, $dateonly = null)
     {
         $is_utc = $utc || (($tz = $dt->getTimezone()) && in_array($tz->getName(), array('UTC','GMT','Z')));
         $is_dateonly = $dateonly === null ? (bool)$dt->_dateonly : (bool)$dateonly;
         $vdt = new VObject\Property\DateTime($name);
         $vdt->setDateTime($dt, $is_dateonly ? VObject\Property\DateTime::DATE :
             ($is_utc ? VObject\Property\DateTime::UTC : VObject\Property\DateTime::LOCALTZ));
+
+        // register timezone for VTIMEZONE block
+        if (!$is_utc && !$dateonly && $tz && ($tzname = $tz->getName())) {
+            $ts = $dt->format('U');
+            if (is_array($this->vtimezones[$tzname])) {
+                $this->vtimezones[$tzname][0] = min($this->vtimezones[$tzname][0], $ts);
+                $this->vtimezones[$tzname][1] = max($this->vtimezones[$tzname][1], $ts);
+            }
+            else {
+                $this->vtimezones[$tzname] = array($ts, $ts);
+            }
+        }
+
         return $vdt;
     }
 
@@ -818,9 +836,10 @@ class libvcalendar implements Iterator
      * @param  string  VCalendar method to advertise
      * @param  boolean Directly send data to stdout instead of returning
      * @param  callable Callback function to fetch attachment contents, false if no attachment export
+     * @param  boolean Add VTIMEZONE block with timezone definitions for the included events
      * @return string  Events in iCalendar format (http://tools.ietf.org/html/rfc5545)
      */
-    public function export($objects, $method = null, $write = false, $get_attachment = false, $recurrence_id = null)
+    public function export($objects, $method = null, $write = false, $get_attachment = false, $with_timezones = true)
     {
         $memory_limit = parse_bytes(ini_get('memory_limit'));
         $this->method = $method;
@@ -835,8 +854,6 @@ class libvcalendar implements Iterator
             $vcal->METHOD = $method;
         }
 
-        // TODO: include timezone information
-
         // write vcalendar header
         if ($write) {
             echo preg_replace('/END:VCALENDAR[\r\n]*$/m', '', $vcal->serialize());
@@ -844,6 +861,23 @@ class libvcalendar implements Iterator
 
         foreach ($objects as $object) {
             $this->_to_ical($object, !$write?$vcal:false, $get_attachment);
+        }
+
+        // include timezone information
+        if ($with_timezones || !empty($method)) {
+            foreach ($this->vtimezones as $tzid => $range) {
+                $vt = self::get_vtimezone($tzid, $range[0], $range[1]);
+                if (empty($vt)) {
+                    continue;  // no timezone information found
+                }
+
+                if ($vcal) {
+                    $vcal->add($vt);
+                }
+                else {
+                    echo $vt->serialize();
+                }
+            }
         }
 
         if ($write) {
@@ -871,7 +905,7 @@ class libvcalendar implements Iterator
 
         // set DTSTAMP according to RFC 5545, 3.8.7.2.
         $dtstamp = !empty($event['changed']) && !empty($this->method) ? $event['changed'] : new DateTime();
-        $ve->add(self::datetime_prop('DTSTAMP', $dtstamp, true));
+        $ve->add($this->datetime_prop('DTSTAMP', $dtstamp, true));
 
         // all-day events end the next day
         if ($event['allday'] && !empty($event['end'])) {
@@ -880,15 +914,15 @@ class libvcalendar implements Iterator
             $event['end']->_dateonly = true;
         }
         if (!empty($event['created']))
-            $ve->add(self::datetime_prop('CREATED', $event['created'], true));
+            $ve->add($this->datetime_prop('CREATED', $event['created'], true));
         if (!empty($event['changed']))
-            $ve->add(self::datetime_prop('LAST-MODIFIED', $event['changed'], true));
+            $ve->add($this->datetime_prop('LAST-MODIFIED', $event['changed'], true));
         if (!empty($event['start']))
-            $ve->add(self::datetime_prop('DTSTART', $event['start'], false, (bool)$event['allday']));
+            $ve->add($this->datetime_prop('DTSTART', $event['start'], false, (bool)$event['allday']));
         if (!empty($event['end']))
-            $ve->add(self::datetime_prop('DTEND',   $event['end'], false, (bool)$event['allday']));
+            $ve->add($this->datetime_prop('DTEND',   $event['end'], false, (bool)$event['allday']));
         if (!empty($event['due']))
-            $ve->add(self::datetime_prop('DUE',   $event['due'], false));
+            $ve->add($this->datetime_prop('DUE',   $event['due'], false));
 
         if ($recurrence_id)
             $ve->add($recurrence_id);
@@ -928,7 +962,7 @@ class libvcalendar implements Iterator
             }
             // add RDATEs
             if (!empty($rdates)) {
-                $sample = self::datetime_prop('RDATE', $rdates[0]);
+                $sample = $this->datetime_prop('RDATE', $rdates[0]);
                 $rdprop = new VObject\Property\MultiDateTime('RDATE', null);
                 $rdprop->setDateTimes($rdates, $sample->getDateType());
                 $ve->add($rdprop);
@@ -969,7 +1003,7 @@ class libvcalendar implements Iterator
             $ve->add('PERCENT-COMPLETE', intval($event['complete']));
             // Apple iCal required the COMPLETED date to be set in order to consider a task complete
             if ($event['complete'] == 100)
-                $ve->add(self::datetime_prop('COMPLETED', $event['changed'] ?: new DateTime('now - 1 hour'), true));
+                $ve->add($this->datetime_prop('COMPLETED', $event['changed'] ?: new DateTime('now - 1 hour'), true));
         }
 
         if ($event['valarms']) {
@@ -977,7 +1011,7 @@ class libvcalendar implements Iterator
                 $va = VObject\Component::create('VALARM');
                 $va->action = $alarm['action'];
                 if ($alarm['trigger'] instanceof DateTime) {
-                    $va->add(self::datetime_prop('TRIGGER', $alarm['trigger'], true));
+                    $va->add($this->datetime_prop('TRIGGER', $alarm['trigger'], true));
                 }
                 else {
                     $va->add('TRIGGER', $alarm['trigger']);
@@ -1088,12 +1122,101 @@ class libvcalendar implements Iterator
             foreach ($event['recurrence']['EXCEPTIONS'] as $ex) {
                 $exdate = clone $event['start'];
                 $exdate->setDate($ex['start']->format('Y'), $ex['start']->format('n'), $ex['start']->format('j'));
-                $recurrence_id = self::datetime_prop('RECURRENCE-ID', $exdate, true);
+                $recurrence_id = $this->datetime_prop('RECURRENCE-ID', $exdate, true);
                 // if ($ex['thisandfuture'])  // not supported by any client :-(
                 //    $recurrence_id->add('RANGE', 'THISANDFUTURE');
                 $this->_to_ical($ex, $vcal, $get_attachment, $recurrence_id);
             }
         }
+    }
+
+    /**
+     * Returns a VTIMEZONE component for a Olson timezone identifier
+     * with daylight transitions covering the given date range.
+     *
+     * @param string Timezone ID as used in PHP's Date functions
+     * @param integer Unix timestamp with first date/time in this timezone
+     * @param integer Unix timestap with last date/time in this timezone
+     *
+     * @return mixed A Sabre\VObject\Component object representing a VTIMEZONE definition
+     *               or false if no timezone information is available
+     */
+    public static function get_vtimezone($tzid, $from = 0, $to = 0)
+    {
+        if (!$from) $from = time();
+        if (!$to)   $to = $from;
+
+        if (is_string($tzid)) {
+            try {
+                $tz = new \DateTimeZone($tzid);
+            }
+            catch (\Exception $e) {
+                return false;
+            }
+        }
+        else if (is_a($tzid, '\\DateTimeZone')) {
+            $tz = $tzid;
+        }
+
+        if (!is_a($tz, '\\DateTimeZone')) {
+            return false;
+        }
+
+        $year = 86400 * 360;
+        $transitions = $tz->getTransitions($from - $year, $to + $year);
+
+        $vt = new VObject\Component('VTIMEZONE');
+        $vt->TZID = $tz->getName();
+
+        $std = null; $dst = null;
+        foreach ($transitions as $i => $trans) {
+            $cmp = null;
+
+            if ($i == 0) {
+                $tzfrom = $trans['offset'] / 3600;
+                continue;
+            }
+
+            if ($trans['isdst']) {
+                $t_dst = $trans['ts'];
+                $dst = new VObject\Component('DAYLIGHT');
+                $cmp = $dst;
+            }
+            else {
+                $t_std = $trans['ts'];
+                $std = new VObject\Component('STANDARD');
+                $cmp = $std;
+            }
+
+            if ($cmp) {
+                $dt = new DateTime($trans['time']);
+                $offset = $trans['offset'] / 3600;
+
+                $cmp->DTSTART = $dt->format('Ymd\THis');
+                $cmp->TZOFFSETFROM = sprintf('%s%02d%02d', $tzfrom >= 0 ? '+' : '', floor($tzfrom), ($tzfrom - floor($tzfrom)) * 60);
+                $cmp->TZOFFSETTO   = sprintf('%s%02d%02d', $offset >= 0 ? '+' : '', floor($offset), ($offset - floor($offset)) * 60);
+
+                if (!empty($trans['abbr'])) {
+                    $cmp->TZNAME = $trans['abbr'];
+                }
+
+                $tzfrom = $offset;
+                $vt->add($cmp);
+            }
+
+            // we covered the entire date range
+            if ($std && $dst && min($t_std, $t_dst) < $from && max($t_std, $t_dst) > $to) {
+                break;
+            }
+        }
+
+        // add X-MICROSOFT-CDO-TZID if available
+        $microsoftExchangeMap = array_flip(VObject\TimeZoneUtil::$microsoftExchangeMap);
+        if (array_key_exists($tz->getName(), $microsoftExchangeMap)) {
+            $vt->add('X-MICROSOFT-CDO-TZID', $microsoftExchangeMap[$tz->getName()]);
+        }
+
+        return $vt;
     }
 
 

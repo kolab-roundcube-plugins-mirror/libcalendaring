@@ -323,7 +323,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
     /**
      * Test for iCal export from internal hash array representation
      *
-     * @depends test_extended
+     * 
      */
     function test_export()
     {
@@ -339,12 +339,20 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $event['attachments'][0]['id'] = '1';
         $event['description'] = '*Exported by libvcalendar*';
 
-        $ics = $ical->export(array($event), 'REQUEST', false, array($this, 'get_attachment_data'));
+        $event['start']->setTimezone(new DateTimezone('Europe/Berlin'));
+        $event['end']->setTimezone(new DateTimezone('Europe/Berlin'));
+
+        $ics = $ical->export(array($event), 'REQUEST', false, array($this, 'get_attachment_data'), true);
 
         $this->assertContains('BEGIN:VCALENDAR',    $ics, "VCALENDAR encapsulation BEGIN");
-        $this->assertContains('METHOD:REQUEST',     $ics, "iTip method");
-        $this->assertContains('BEGIN:VEVENT',       $ics, "VEVENT encapsulation BEGIN");
 
+        $this->assertContains('BEGIN:VTIMEZONE', $ics, "VTIMEZONE encapsulation BEGIN");
+        $this->assertContains('TZID:Europe/Berlin', $ics, "Timezone ID");
+        $this->assertContains('TZOFFSETFROM:+0100', $ics, "Timzone transition FROM");
+        $this->assertContains('TZOFFSETTO:+0200', $ics, "Timzone transition TO");
+        $this->assertContains('END:VTIMEZONE', $ics, "VTIMEZONE encapsulation END");
+
+        $this->assertContains('BEGIN:VEVENT',       $ics, "VEVENT encapsulation BEGIN");
         $this->assertContains('UID:ac6b0aee-2519-4e5c-9a25-48c57064c9f0', $ics, "Event UID");
         $this->assertContains('SEQUENCE:' . $event['sequence'],           $ics, "Export Sequence number");
         $this->assertContains('CLASS:CONFIDENTIAL',                       $ics, "Sensitivity => Class");
@@ -467,15 +475,54 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
 
     function test_datetime()
     {
-        $localtime = libvcalendar::datetime_prop('DTSTART', new DateTime('2013-09-01 12:00:00', new DateTimeZone('Europe/Berlin')));
-        $localdate = libvcalendar::datetime_prop('DTSTART', new DateTime('2013-09-01', new DateTimeZone('Europe/Berlin')), false, true);
-        $utctime   = libvcalendar::datetime_prop('DTSTART', new DateTime('2013-09-01 12:00:00', new DateTimeZone('UTC')));
-        $asutctime = libvcalendar::datetime_prop('DTSTART', new DateTime('2013-09-01 12:00:00', new DateTimeZone('Europe/Berlin')), true);
+        $ical = new libvcalendar();
+        $localtime = $ical->datetime_prop('DTSTART', new DateTime('2013-09-01 12:00:00', new DateTimeZone('Europe/Berlin')));
+        $localdate = $ical->datetime_prop('DTSTART', new DateTime('2013-09-01', new DateTimeZone('Europe/Berlin')), false, true);
+        $utctime   = $ical->datetime_prop('DTSTART', new DateTime('2013-09-01 12:00:00', new DateTimeZone('UTC')));
+        $asutctime = $ical->datetime_prop('DTSTART', new DateTime('2013-09-01 12:00:00', new DateTimeZone('Europe/Berlin')), true);
 
         $this->assertContains('TZID=Europe/Berlin', $localtime->serialize());
         $this->assertContains('VALUE=DATE', $localdate->serialize());
         $this->assertContains('20130901T120000Z', $utctime->serialize());
         $this->assertContains('20130901T100000Z', $asutctime->serialize());
+    }
+
+    function test_get_vtimezone()
+    {
+        $vtz = libvcalendar::get_vtimezone('Europe/Berlin', strtotime('2014-08-22T15:00:00+02:00'));
+        $this->assertInstanceOf('\Sabre\VObject\Component', $vtz, "VTIMEZONE is a Component object");
+        $this->assertEquals('Europe/Berlin', $vtz->TZID);
+        $this->assertEquals('4', $vtz->{'X-MICROSOFT-CDO-TZID'});
+
+        // check for transition to daylight saving time which is BEFORE the given date
+        $dst = reset($vtz->select('DAYLIGHT'));
+        $this->assertEquals('DAYLIGHT', $dst->name);
+        $this->assertEquals('20140330T010000', $dst->DTSTART);
+        $this->assertEquals('+0100', $dst->TZOFFSETFROM);
+        $this->assertEquals('+0200', $dst->TZOFFSETTO);
+        $this->assertEquals('CEST', $dst->TZNAME);
+
+        // check (last) transition to standard time which is AFTER the given date
+        $std = end($vtz->select('STANDARD'));
+        $this->assertEquals('STANDARD', $std->name);
+        $this->assertEquals('20141026T010000', $std->DTSTART);
+        $this->assertEquals('+0200', $std->TZOFFSETFROM);
+        $this->assertEquals('+0100', $std->TZOFFSETTO);
+        $this->assertEquals('CET', $std->TZNAME);
+
+        // unknown timezone
+        $vtz = libvcalendar::get_vtimezone('America/Foo Bar');
+        $this->assertEquals(false, $vtz);
+
+        // invalid input data
+        $vtz = libvcalendar::get_vtimezone(new DateTime());
+        $this->assertEquals(false, $vtz);
+
+        // DateTimezone as input data
+        $vtz = libvcalendar::get_vtimezone(new DateTimezone('Pacific/Chatham'));
+        $this->assertInstanceOf('\Sabre\VObject\Component', $vtz);
+        $this->assertContains('TZOFFSETFROM:+1245', $vtz->serialize());
+        $this->assertContains('TZOFFSETTO:+1345', $vtz->serialize());
     }
 
     function get_attachment_data($id, $event)

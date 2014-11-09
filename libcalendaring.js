@@ -127,8 +127,8 @@ function rcube_libcalendaring(settings)
             return null;
         }
 
-        var date = new Date(m[1], 0, 1),
-            check = new Date(m[1], 0, 1, 9, 0);
+        var date = new Date(m[1], 0, 2),
+            check = new Date(m[1], 0, 2, 9, 0);
         if (m[3]) {
             date.setMonth(m[3] - 1);
             check.setMonth(m[3] - 1);
