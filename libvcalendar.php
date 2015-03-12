@@ -453,7 +453,8 @@ class libvcalendar implements Iterator
                 break;
 
             case 'RELATED-TO':
-                if ($prop->offsetGet('RELTYPE') == 'PARENT') {
+                $reltype = $prop->offsetGet('RELTYPE');
+                if ($reltype == 'PARENT' || $reltype === null) {
                     $event['parent_id'] = $prop->value;
                 }
                 break;

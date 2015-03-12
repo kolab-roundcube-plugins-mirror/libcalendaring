@@ -318,6 +318,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals('IN-PROCESS',   $task['status'],  "Task status property");
         $this->assertEquals(1, count($task['x-custom']),      "Custom properties");
         $this->assertEquals(4, count($task['categories']));
+        $this->assertEquals('1234567890-12345678-PARENT', $task['parent_id'], "Parent Relation");
     }
 
     /**

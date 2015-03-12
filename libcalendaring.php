@@ -410,7 +410,26 @@ class libcalendaring extends rcube_plugin
             }
             $offset = $notify[0] * $mult;
             $refdate = $mult > 0 ? $rec['end'] : $rec['start'];
-            $notify_at = $refdate->format('U') + $offset;
+
+            if ($refdate && is_a($refdate, 'DateTime')) {
+                $notify_at = $refdate->format('U') + $offset;
+            }
+            else {
+                rcube::raise_error(array(
+                    'code' => 600,
+                    'type' => 'php',
+                    'file' => __FILE__,
+                    'line' => __LINE__,
+                    'message' => sprintf("Invalid reference date for alarm: %s; type=%s; start=%s; end=%s; uid=%s",
+                         $trigger,
+                         $type,
+                         var_export($rec['start'], true),
+                         var_export($rec['end'], true),
+                         $rec['uid']
+                    )),
+                    true, false);
+                return null;
+            }
         }
         else {  // absolute timestamp
             $notify_at = $notify[0];
