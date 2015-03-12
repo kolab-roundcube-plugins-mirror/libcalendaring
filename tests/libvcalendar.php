@@ -112,8 +112,6 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
 
     /**
      * Test some extended ical properties such as attendees, recurrence rules, alarms and attachments
-     *
-     * @depends test_import_from_file
      */
     function test_extended()
     {
@@ -156,15 +154,19 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals(2, count($rrule['EXDATE']),          "Recurrence EXDATEs");
         $this->assertInstanceOf('DateTime', $rrule['EXDATE'][0], "Recurrence EXDATE as DateTime");
 
-        // alarms
-        $this->assertEquals('-12H:DISPLAY', $event['alarms'], "Serialized alarms string");
-        $alarm = libcalendaring::parse_alaram_value($event['alarms']);
-        $this->assertEquals('12', $alarm[0], "Alarm value");
-        $this->assertEquals('-H', $alarm[1], "Alarm unit");
-
         // categories, class
         $this->assertEquals('libcalendaring tests', join(',', (array)$event['categories']), "Event categories");
         $this->assertEquals('confidential', $event['sensitivity'], "Class/sensitivity = confidential");
+
+        // parse a recurrence chain instance
+        $events = $ical->import_from_file(__DIR__ . '/resources/recurrence-id.ics', 'UTF-8');
+        $this->assertEquals(1, count($events), "Fall back to Component::getComponents() when getBaseComponents() is empty");
+        $this->assertInstanceOf('DateTime', $events[0]['recurrence_date'], "Recurrence-ID as date");
+        $this->assertTrue($events[0]['thisandfuture'], "Range=THISANDFUTURE");
+
+        $this->assertEquals(count($events[0]['exceptions']), 1, "Second VEVENT as exception");
+        $this->assertEquals($events[0]['exceptions'][0]['uid'], $events[0]['uid'], "Exception UID match");
+        $this->assertEquals($events[0]['exceptions'][0]['sequence'], '2', "Exception sequence");
     }
 
     /**
@@ -173,24 +175,28 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
     function test_alarms()
     {
         $ical = new libvcalendar();
+
         $events = $ical->import_from_file(__DIR__ . '/resources/recurring.ics', 'UTF-8');
         $event = $events[0];
 
         $this->assertEquals('-12H:DISPLAY', $event['alarms'], "Serialized alarms string");
-        $alarm = libcalendaring::parse_alaram_value($event['alarms']);
+        $alarm = libcalendaring::parse_alarm_value($event['alarms']);
         $this->assertEquals('12', $alarm[0], "Alarm value");
         $this->assertEquals('-H', $alarm[1], "Alarm unit");
 
         $this->assertEquals('DISPLAY', $event['valarms'][0]['action'],  "Full alarm item (action)");
-        $this->assertEquals('-PT12H',   $event['valarms'][0]['trigger'], "Full alarm item (trigger)");
+        $this->assertEquals('-PT12H',  $event['valarms'][0]['trigger'], "Full alarm item (trigger)");
 
         // alarm trigger with 0 values
         $events = $ical->import_from_file(__DIR__ . '/resources/alarms.ics', 'UTF-8');
         $event = $events[0];
 
         $this->assertEquals('-30M:DISPLAY', $event['alarms'], "Stripped alarm string");
-        $alarm = libcalendaring::parse_alaram_value($event['alarms']);
+        $alarm = libcalendaring::parse_alarm_value($event['alarms']);
+        $this->assertEquals('30', $alarm[0], "Alarm value");
+        $this->assertEquals('-M', $alarm[1], "Alarm unit");
         $this->assertEquals('-30M', $alarm[2], "Alarm string");
+        $this->assertEquals('-PT30M', $alarm[3], "Unified alarm string (stripped zero-values)");
 
         $this->assertEquals('DISPLAY', $event['valarms'][0]['action'],  "First alarm action");
         $this->assertEquals('This is the first event reminder', $event['valarms'][0]['description'],  "First alarm text");
@@ -239,13 +245,14 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
 
         // alarms
         $this->assertEquals('-45M:AUDIO', $event['alarms'], "Relative alarm string");
-        $alarm = libcalendaring::parse_alaram_value($event['alarms']);
+        $alarm = libcalendaring::parse_alarm_value($event['alarms']);
         $this->assertEquals('45', $alarm[0], "Alarm value");
         $this->assertEquals('-M', $alarm[1], "Alarm unit");
 
         $this->assertEquals(1, count($event['valarms']), "Ignore invalid alarm blocks");
-        $this->assertEquals('AUDIO', $event['valarms'][0]['action'],  "Full alarm item (action)");
+        $this->assertEquals('AUDIO', $event['valarms'][0]['action'],   "Full alarm item (action)");
         $this->assertEquals('-PT45M', $event['valarms'][0]['trigger'], "Full alarm item (trigger)");
+        $this->assertEquals('Basso',  $event['valarms'][0]['uri'],     "Full alarm item (attachment)");
     }
 
     /**
@@ -367,7 +374,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $rrule = $event['recurrence'];
         $this->assertRegExp('/RRULE:.*FREQ='.$rrule['FREQ'].'/',          $ics, "Export Recurrence Frequence");
         $this->assertRegExp('/RRULE:.*INTERVAL='.$rrule['INTERVAL'].'/',  $ics, "Export Recurrence Interval");
-        $this->assertRegExp('/RRULE:.*UNTIL=20140718/',                   $ics, "Export Recurrence End date");
+        $this->assertRegExp('/RRULE:.*UNTIL=20140718T215959Z/',           $ics, "Export Recurrence End date");
         $this->assertRegExp('/RRULE:.*BYDAY='.$rrule['BYDAY'].'/',        $ics, "Export Recurrence BYDAY");
         $this->assertRegExp('/EXDATE.*:20131218/',     $ics, "Export Recurrence EXDATE");
 
@@ -436,9 +443,30 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals($num, substr_count($ics, 'UID:'.$event['uid']), "Recurrence Exceptions with same UID");
         $this->assertEquals($num, substr_count($ics, 'END:VEVENT'),         "VEVENT encapsulation END");
 
-        $this->assertContains('RECURRENCE-ID;VALUE=DATE-TIME:20130814', $ics, "Recurrence-ID (1) being the exception date");
-        $this->assertContains('RECURRENCE-ID;VALUE=DATE-TIME:20131113', $ics, "Recurrence-ID (2) being the exception date");
+        $this->assertContains('RECURRENCE-ID;VALUE=DATE-TIME;TZID=Europe/Zurich:20130814', $ics, "Recurrence-ID (1) being the exception date");
+        $this->assertContains('RECURRENCE-ID;VALUE=DATE-TIME;TZID=Europe/Zurich:20131113', $ics, "Recurrence-ID (2) being the exception date");
         $this->assertContains('SUMMARY:'.$exception2['title'], $ics, "Exception title");
+    }
+
+    function test_export_valid_rrules()
+    {
+        $event = array(
+            'uid' => '1234567890',
+            'start' => new DateTime('now'),
+            'end' => new DateTime('now + 30min'),
+            'title' => 'test_export_valid_rrules',
+            'recurrence' => array(
+                'FREQ' => 'DAILY',
+                'COUNT' => 5,
+                'EXDATE' => array(),
+                'RDATE' => array(),
+            ),
+        );
+        $ical = new libvcalendar();
+        $ics = $ical->export(array($event), null, false, null, false);
+
+        $this->assertNotContains('EXDATE=', $ics);
+        $this->assertNotContains('RDATE=', $ics);
     }
 
     /**
