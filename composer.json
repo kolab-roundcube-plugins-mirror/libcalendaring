@@ -2,7 +2,7 @@
     "name": "kolab/libcalendaring",
     "type": "roundcube-plugin",
     "description": "Library providing common functions for calendaring plugins",
-    "homepage": "http://git.kolab.org/roundcubemail-plugins-kolab/",
+    "homepage": "https://git.kolab.org/diffusion/RPK/",
     "license": "AGPLv3",
     "authors": [
         {
@@ -14,7 +14,7 @@
     "repositories": [
         {
             "type": "composer",
-            "url": "http://plugins.roundcube.net"
+            "url": "https://plugins.roundcube.net"
         }
     ],
     "require": {

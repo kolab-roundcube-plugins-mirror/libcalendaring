@@ -437,6 +437,13 @@ class libvcalendar implements Iterator
                 $event['status'] = strval($prop->value);
                 break;
 
+            case 'COMPLETED':
+                if (self::convert_datetime($prop)) {
+                    $event['status'] = 'COMPLETED';
+                    $event['complete'] = 100;
+                }
+                break;
+
             case 'PRIORITY':
                 if (is_numeric($prop->value))
                     $event['priority'] = $prop->value;
@@ -597,9 +604,9 @@ class libvcalendar implements Iterator
 
         // find alarms
         foreach ($ve->select('VALARM') as $valarm) {
-            $action = 'DISPLAY';
+            $action  = 'DISPLAY';
             $trigger = null;
-            $alarm = array();
+            $alarm   = array();
 
             foreach ($valarm->children as $prop) {
                 switch ($prop->name) {
@@ -608,6 +615,9 @@ class libvcalendar implements Iterator
                         if ($param->name == 'VALUE' && $param->value == 'DATE-TIME') {
                             $trigger = '@' . $prop->getDateTime()->format('U');
                             $alarm['trigger'] = $prop->getDateTime();
+                        }
+                        else if ($param->name == 'RELATED') {
+                            $alarm['related'] = $param->value;
                         }
                     }
                     if (!$trigger && ($values = libcalendaring::parse_alarm_value($prop->value))) {
@@ -908,11 +918,11 @@ class libvcalendar implements Iterator
                     continue;  // no timezone information found
                 }
 
-                if ($vcal) {
-                    $vcal->add($vt);
+                if ($write) {
+                    echo $vt->serialize();
                 }
                 else {
-                    echo $vt->serialize();
+                    $vcal->add($vt);
                 }
             }
         }
@@ -1048,9 +1058,11 @@ class libvcalendar implements Iterator
 
         if (!empty($event['complete'])) {
             $ve->add('PERCENT-COMPLETE', intval($event['complete']));
-            // Apple iCal required the COMPLETED date to be set in order to consider a task complete
-            if ($event['complete'] == 100)
-                $ve->add($this->datetime_prop('COMPLETED', $event['changed'] ?: new DateTime('now - 1 hour'), true));
+        }
+
+        // Apple iCal and BusyCal required the COMPLETED date to be set in order to consider a task complete
+        if ($event['status'] == 'COMPLETED' || $event['complete'] == 100) {
+            $ve->add($this->datetime_prop('COMPLETED', $event['changed'] ?: new DateTime('now - 1 hour'), true));
         }
 
         if ($event['valarms']) {
@@ -1061,7 +1073,11 @@ class libvcalendar implements Iterator
                     $va->add($this->datetime_prop('TRIGGER', $alarm['trigger'], true));
                 }
                 else {
-                    $va->add('TRIGGER', $alarm['trigger']);
+                    $alarm_props = array();
+                    if (strtoupper($alarm['related']) == 'END') {
+                        $alarm_props['RELATED'] = 'END';
+                    }
+                    $va->add('TRIGGER', $alarm['trigger'], $alarm_props);
                 }
 
                 if ($alarm['action'] == 'EMAIL') {

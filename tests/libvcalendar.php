@@ -186,6 +186,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
 
         $this->assertEquals('DISPLAY', $event['valarms'][0]['action'],  "Full alarm item (action)");
         $this->assertEquals('-PT12H',  $event['valarms'][0]['trigger'], "Full alarm item (trigger)");
+        $this->assertEquals('END',  $event['valarms'][0]['related'], "Full alarm item (related)");
 
         // alarm trigger with 0 values
         $events = $ical->import_from_file(__DIR__ . '/resources/alarms.ics', 'UTF-8');
@@ -199,6 +200,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals('-PT30M', $alarm[3], "Unified alarm string (stripped zero-values)");
 
         $this->assertEquals('DISPLAY', $event['valarms'][0]['action'],  "First alarm action");
+        $this->assertEquals('', $event['valarms'][0]['related'],  "First alarm related property");
         $this->assertEquals('This is the first event reminder', $event['valarms'][0]['description'],  "First alarm text");
 
         $this->assertEquals(2, count($event['valarms']), "List all VALARM blocks");
@@ -326,6 +328,13 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals(1, count($task['x-custom']),      "Custom properties");
         $this->assertEquals(4, count($task['categories']));
         $this->assertEquals('1234567890-12345678-PARENT', $task['parent_id'], "Parent Relation");
+
+        $completed = $tasks[1];
+        $this->assertEquals('COMPLETED', $completed['status'], "Task status=completed when COMPLETED property is present");
+        $this->assertEquals(100, $completed['complete'], "Task percent complete value");
+
+        $ics = $ical->export(array($completed));
+        $this->assertRegExp('/COMPLETED(;VALUE=DATE-TIME)?:[0-9TZ]+/', $ics, "Export COMPLETED property");
     }
 
     /**
@@ -379,7 +388,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertRegExp('/EXDATE.*:20131218/',     $ics, "Export Recurrence EXDATE");
 
         $this->assertContains('BEGIN:VALARM',   $ics, "Export VALARM");
-        $this->assertContains('TRIGGER:-PT12H', $ics, "Export Alarm trigger");
+        $this->assertContains('TRIGGER;RELATED=END:-PT12H', $ics, "Export Alarm trigger");
 
         $this->assertRegExp('/ATTACH.*;VALUE=BINARY/',                    $ics, "Embed attachment");
         $this->assertRegExp('/ATTACH.*;ENCODING=BASE64/',                 $ics, "Attachment B64 encoding");

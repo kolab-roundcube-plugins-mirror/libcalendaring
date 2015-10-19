@@ -324,21 +324,28 @@ class libcalendaring extends rcube_plugin
     public function alarm_select($attrib, $alarm_types, $absolute_time = true)
     {
         unset($attrib['name']);
-        $select_type = new html_select(array('name' => 'alarmtype[]', 'class' => 'edit-alarm-type', 'id' => $attrib['id']));
+
+        $input_value = new html_inputfield(array('name' => 'alarmvalue[]', 'class' => 'edit-alarm-value', 'size' => 3));
+        $input_date  = new html_inputfield(array('name' => 'alarmdate[]', 'class' => 'edit-alarm-date', 'size' => 10));
+        $input_time  = new html_inputfield(array('name' => 'alarmtime[]', 'class' => 'edit-alarm-time', 'size' => 6));
+        $select_type    = new html_select(array('name' => 'alarmtype[]', 'class' => 'edit-alarm-type', 'id' => $attrib['id']));
+        $select_offset  = new html_select(array('name' => 'alarmoffset[]', 'class' => 'edit-alarm-offset'));
+        $select_related = new html_select(array('name' => 'alarmrelated[]', 'class' => 'edit-alarm-related'));
+        $object_type    = $attrib['_type'] ?: 'event';
+
         $select_type->add($this->gettext('none'), '');
         foreach ($alarm_types as $type)
             $select_type->add($this->gettext(strtolower("alarm{$type}option")), $type);
 
-        $input_value = new html_inputfield(array('name' => 'alarmvalue[]', 'class' => 'edit-alarm-value', 'size' => 3));
-        $input_date = new html_inputfield(array('name' => 'alarmdate[]', 'class' => 'edit-alarm-date', 'size' => 10));
-        $input_time = new html_inputfield(array('name' => 'alarmtime[]', 'class' => 'edit-alarm-time', 'size' => 6));
-
-        $select_offset = new html_select(array('name' => 'alarmoffset[]', 'class' => 'edit-alarm-offset'));
         foreach (array('-M','-H','-D','+M','+H','+D') as $trigger)
             $select_offset->add($this->gettext('trigger' . $trigger), $trigger);
 
+        $select_offset->add($this->gettext('trigger0'), '0');
         if ($absolute_time)
             $select_offset->add($this->gettext('trigger@'), '@');
+
+        $select_related->add($this->gettext('relatedstart'), 'start');
+        $select_related->add($this->gettext('relatedend' . $object_type), 'end');
 
         // pre-set with default values from user settings
         $preset = self::parse_alarm_value($this->rc->config->get('calendar_default_alarm_offset', '-15M'));
@@ -348,6 +355,7 @@ class libcalendaring extends rcube_plugin
             html::span(array('class' => 'edit-alarm-values', 'style' => 'display:none'),
                 $input_value->show($preset[0]) . ' ' .
                 $select_offset->show($preset[1]) . ' ' .
+                $select_related->show() . ' ' .
                 $input_date->show('', $hidden) . ' ' .
                 $input_time->show('', $hidden)
             )
@@ -525,10 +533,11 @@ class libcalendaring extends rcube_plugin
         }
         else {
             $trigger = $alarm['trigger'];
-            $action = $alarm['action'];
+            $action  = $alarm['action'];
+            $related = $alarm['related'];
         }
 
-        $text = '';
+        $text  = '';
         $rcube = rcube::get_instance();
 
         switch ($action) {
@@ -556,11 +565,15 @@ class libcalendaring extends rcube_plugin
             ));
         }
         else if ($val = self::parse_alarm_value($trigger)) {
+            $r = strtoupper($related ?: 'start') == 'END' ? 'end' : '';
             // TODO: for all-day events say 'on date of event at XX' ?
-            if ($val[0] == 0)
-                $text .= ' ' . $rcube->gettext('libcalendaring.triggerattime');
-            else
-                $text .= ' ' . intval($val[0]) . ' ' . $rcube->gettext('libcalendaring.trigger' . $val[1]);
+            if ($val[0] == 0) {
+                $text .= ' ' . $rcube->gettext('libcalendaring.triggerattime' . $r);
+            }
+            else {
+                $label = 'libcalendaring.trigger' . $r . $val[1];
+                $text .= ' ' . intval($val[0]) . ' ' . $rcube->gettext($label);
+            }
         }
         else {
             return false;
@@ -599,7 +612,7 @@ class libcalendaring extends rcube_plugin
             }
         }
 
-        $expires = new DateTime('now - 12 hours');
+        $expires  = new DateTime('now - 12 hours');
         $alarm_id = $rec['id'];  // alarm ID eq. record ID by default to keep backwards compatibility
 
         // handle multiple alarms
@@ -611,7 +624,7 @@ class libcalendaring extends rcube_plugin
                 $notify_time = $alarm['trigger'];
             }
             else if (is_string($alarm['trigger'])) {
-                $refdate = $alarm['trigger'][0] == '+' ? $rec['end'] : $rec['start'];
+                $refdate = $alarm['related'] == 'END' ? $rec['end'] : $rec['start'];
 
                 // abort if no reference date is available to compute notification time
                 if (!is_a($refdate, 'DateTime'))
@@ -621,7 +634,7 @@ class libcalendaring extends rcube_plugin
 
                 try {
                     $interval = new DateInterval(trim($alarm['trigger'], '+-'));
-                    $interval->invert = $alarm['trigger'][0] != '+';
+                    $interval->invert = $alarm['trigger'][0] == '-';
                     $notify_time = clone $refdate;
                     $notify_time->add($interval);
                 }
@@ -632,8 +645,8 @@ class libcalendaring extends rcube_plugin
             }
 
             if ($notify_time && (!$notify_at || ($notify_time > $notify_at && $notify_time > $expires))) {
-                $notify_at = $notify_time;
-                $action = $alarm['action'];
+                $notify_at  = $notify_time;
+                $action     = $alarm['action'];
                 $alarm_prop = $alarm;
 
                 // generate a unique alarm ID if multiple alarms are set
