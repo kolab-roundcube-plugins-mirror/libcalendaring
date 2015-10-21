@@ -296,17 +296,17 @@ class libcalendaring extends rcube_plugin
         $time_format = self::to_php_date_format($this->rc->config->get('calendar_time_format', $this->defaults['calendar_time_format']));
 
         if ($event['allday']) {
-            $fromto = format_date($event['start'], $date_format);
-            if (($todate = format_date($event['end'], $date_format)) != $fromto)
+            $fromto = $this->rc->format_date($event['start'], $date_format);
+            if (($todate = $this->rc->format_date($event['end'], $date_format)) != $fromto)
                 $fromto .= ' - ' . $todate;
         }
         else if ($duration < 86400 && $event['start']->format('d') == $event['end']->format('d')) {
-            $fromto = format_date($event['start'], $date_format) . ' ' . format_date($event['start'], $time_format) .
-                ' - ' . format_date($event['end'], $time_format);
+            $fromto = $this->rc->format_date($event['start'], $date_format) . ' ' . $this->rc->format_date($event['start'], $time_format) .
+                ' - ' . $this->rc->format_date($event['end'], $time_format);
         }
         else {
-            $fromto = format_date($event['start'], $date_format) . ' ' . format_date($event['start'], $time_format) .
-                ' - ' . format_date($event['end'], $date_format) . ' ' . format_date($event['end'], $time_format);
+            $fromto = $this->rc->format_date($event['start'], $date_format) . ' ' . $this->rc->format_date($event['start'], $time_format) .
+                ' - ' . $this->rc->format_date($event['end'], $date_format) . ' ' . $this->rc->format_date($event['end'], $time_format);
         }
 
         // add timezone information
@@ -811,7 +811,7 @@ class libcalendaring extends rcube_plugin
             $until =  $this->gettext(array('name' => 'forntimes', 'vars' => array('nr' => $rrule['COUNT'])));
         }
         else if ($rrule['UNTIL']) {
-            $until = $this->gettext('recurrencend') . ' ' . format_date($rrule['UNTIL'], self::to_php_date_format($this->rc->config->get('calendar_date_format', $this->defaults['calendar_date_format'])));
+            $until = $this->gettext('recurrencend') . ' ' . $this->rc->format_date($rrule['UNTIL'], self::to_php_date_format($this->rc->config->get('calendar_date_format', $this->defaults['calendar_date_format'])));
         }
         else {
             $until = $this->gettext('forever');
@@ -821,7 +821,7 @@ class libcalendaring extends rcube_plugin
         if (is_array($rrule['EXDATE']) && !empty($rrule['EXDATE'])) {
           $format = self::to_php_date_format($this->rc->config->get('calendar_date_format', $this->defaults['calendar_date_format']));
           $exdates = array_map(
-            function($dt) use ($format) { return format_date($dt, $format); },
+            function($dt) use ($format) { return rcmail::get_instance()->format_date($dt, $format); },
             array_slice($rrule['EXDATE'], 0, 10)
           );
           $except = '; ' . $this->gettext('except') . ' ' . join(', ', $exdates);
@@ -1094,18 +1094,18 @@ class libcalendaring extends rcube_plugin
                       ));
                   }
                   else {
-                      $button = Q($this->rc->gettext('delete'));
+                      $button = rcube::Q($this->rc->gettext('delete'));
                   }
 
                   $content = html::a(array(
                       'href' => "#delete",
                       'class' => 'delete',
-                      'onclick' => sprintf("return %s.remove_from_attachment_list('rcmfile%s')", JS_OBJECT_NAME, $id),
+                      'onclick' => sprintf("return %s.remove_from_attachment_list('rcmfile%s')", rcmail_output::JS_OBJECT_NAME, $id),
                       'title' => $this->rc->gettext('delete'),
                       'aria-label' => $this->rc->gettext('delete') . ' ' . $attachment['name'],
                   ), $button);
 
-                  $content .= Q($attachment['name']);
+                  $content .= rcube::Q($attachment['name']);
 
                   $this->rc->output->command('add2attachment_list', "rcmfile$id", array(
                       'html' => $content,
@@ -1117,7 +1117,7 @@ class libcalendaring extends rcube_plugin
               else {  // upload failed
                   if ($err == UPLOAD_ERR_INI_SIZE || $err == UPLOAD_ERR_FORM_SIZE) {
                     $msg = $this->rc->gettext(array('name' => 'filesizeerror', 'vars' => array(
-                        'size' => show_bytes(parse_bytes(ini_get('upload_max_filesize'))))));
+                        'size' => $this->rc->show_bytes(parse_bytes(ini_get('upload_max_filesize'))))));
                   }
                   else if ($attachment['error']) {
                       $msg = $attachment['error'];
@@ -1136,7 +1136,7 @@ class libcalendaring extends rcube_plugin
             // show filesizeerror instead of fileuploaderror
             if ($maxsize = ini_get('post_max_size'))
                 $msg = $this->rc->gettext(array('name' => 'filesizeerror', 'vars' => array(
-                    'size' => show_bytes(parse_bytes($maxsize)))));
+                    'size' => $this->rc->show_bytes(parse_bytes($maxsize)))));
             else
                 $msg = $this->rc->gettext('fileuploaderror');
 
@@ -1194,7 +1194,7 @@ class libcalendaring extends rcube_plugin
 
             // display page, @TODO: support text/plain (and maybe some other text formats)
             if ($mimetype == 'text/html' && empty($_GET['_download'])) {
-                $OUTPUT = new rcube_html_page();
+                $OUTPUT = new rcmail_html_page();
                 // @TODO: use washtml on $body
                 $OUTPUT->write($plugin['body']);
             }
@@ -1236,7 +1236,7 @@ class libcalendaring extends rcube_plugin
 
         header('Content-Type: text/html; charset=' . RCUBE_CHARSET);
         print "<html>\n<head>\n"
-            . '<meta http-equiv="refresh" content="0; url='.Q($url).'">' . "\n"
+            . '<meta http-equiv="refresh" content="0; url='.rcube::Q($url).'">' . "\n"
             . '<meta http-equiv="content-type" content="text/html; charset='.RCUBE_CHARSET.'">' . "\n"
             . "</head>\n<body>\n$message\n</body>\n</html>";
         exit;
@@ -1269,21 +1269,21 @@ class libcalendaring extends rcube_plugin
         $table = new html_table(array('cols' => $dl_link ? 3 : 2));
 
         if (!empty($this->attachment['name'])) {
-            $table->add('title', Q($this->rc->gettext('filename')));
-            $table->add('header', Q($this->attachment['name']));
+            $table->add('title', rcube::Q($this->rc->gettext('filename')));
+            $table->add('header', rcube::Q($this->attachment['name']));
             if ($dl_link) {
-                $table->add('download-link', html::a($dl_url, Q($this->rc->gettext('download'))));
+                $table->add('download-link', html::a($dl_url, rcube::Q($this->rc->gettext('download'))));
             }
         }
 
         if (!empty($this->attachment['mimetype'])) {
-            $table->add('title', Q($this->rc->gettext('type')));
-            $table->add('header', Q($this->attachment['mimetype']));
+            $table->add('title', rcube::Q($this->rc->gettext('type')));
+            $table->add('header', rcube::Q($this->attachment['mimetype']));
         }
 
         if (!empty($this->attachment['size'])) {
-            $table->add('title', Q($this->rc->gettext('filesize')));
-            $table->add('header', Q(show_bytes($this->attachment['size'])));
+            $table->add('title', rcube::Q($this->rc->gettext('filesize')));
+            $table->add('header', rcube::Q($this->rc->show_bytes($this->attachment['size'])));
         }
 
         $this->rc->output->set_env('attachment_download_url', $dl_url);
@@ -1331,7 +1331,7 @@ class libcalendaring extends rcube_plugin
 
             foreach ($this->ical_parts as $mime_id) {
                 $part    = $this->ical_message->mime_parts[$mime_id];
-                $charset = $part->ctype_parameters['charset'] ?: RCMAIL_CHARSET;
+                $charset = $part->ctype_parameters['charset'] ?: RCUBE_CHARSET;
                 $this->mail_ical_parser->import($this->ical_message->get_part_body($mime_id, true), $charset);
 
                 // check if the parsed object is an instance of a recurring event/task
@@ -1370,7 +1370,7 @@ class libcalendaring extends rcube_plugin
      */
     public function mail_get_itip_object($mbox, $uid, $mime_id, $type = null)
     {
-        $charset = RCMAIL_CHARSET;
+        $charset = RCUBE_CHARSET;
 
         // establish imap connection
         $imap = $this->rc->get_storage();
