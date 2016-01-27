@@ -463,9 +463,9 @@ function rcube_libcalendaring(settings)
             html += '<div class="event-section">' + Q(alarm.location || '') + '</div>';
             html += '<div class="event-section">' + Q(this.event_date_text(alarm)) + '</div>';
 
-            adismiss = $('<a href="#" class="alarm-action-dismiss"></a>').html(rcmail.gettext('dismiss','libcalendaring')).click(function(){
+            adismiss = $('<a href="#" class="alarm-action-dismiss"></a>').html(rcmail.gettext('dismiss','libcalendaring')).click(function(e){
                 me.dismiss_link = $(this);
-                me.dismiss_alarm(me.dismiss_link.data('id'), 0);
+                me.dismiss_alarm(me.dismiss_link.data('id'), 0, e);
             });
             asnooze = $('<a href="#" class="alarm-action-snooze"></a>').html(rcmail.gettext('snooze','libcalendaring')).click(function(e){
                 me.snooze_dropdown($(this), e);
@@ -481,9 +481,9 @@ function rcube_libcalendaring(settings)
             $(this).dialog('close');
         };
 
-        buttons[rcmail.gettext('dismissall','libcalendaring')] = function() {
+        buttons[rcmail.gettext('dismissall','libcalendaring')] = function(e) {
             // submit dismissed event_ids to server
-            me.dismiss_alarm(me.alarm_ids.join(','), 0);
+            me.dismiss_alarm(me.alarm_ids.join(','), 0, e);
             $(this).dialog('close');
         };
 
@@ -529,14 +529,14 @@ function rcube_libcalendaring(settings)
             }
             $('#alarm-snooze-dropdown a').click(function(e){
                 var time = String(this.href).replace(/.+#/, '');
-                me.dismiss_alarm($('#alarm-snooze-dropdown').data('id'), time);
+                me.dismiss_alarm($('#alarm-snooze-dropdown').data('id'), time, e);
                 return false;
             });
         }
 
         // hide visible popup
         if (this.snooze_popup.is(':visible') && this.snooze_popup.data('id') == link.data('id')) {
-            rcmail.command('menu-close', 'alarm-snooze-dropdown');
+            rcmail.command('menu-close', 'alarm-snooze-dropdown', link.get(0), event);
             this.dismiss_link = null;
         }
         else {  // open popup below the clicked link
@@ -549,9 +549,9 @@ function rcube_libcalendaring(settings)
     /**
      * Dismiss or snooze alarms for the given event
      */
-    this.dismiss_alarm = function(id, snooze)
+    this.dismiss_alarm = function(id, snooze, event)
     {
-        rcmail.command('menu-close', 'alarm-snooze-dropdown');
+        rcmail.command('menu-close', 'alarm-snooze-dropdown', null, event);
         rcmail.http_post('utils/plugin.alarms', { action:'dismiss', data:{ id:id, snooze:snooze } });
 
         // remove dismissed alarm from list
