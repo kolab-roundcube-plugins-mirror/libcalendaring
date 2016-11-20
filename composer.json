@@ -4,7 +4,7 @@
     "description": "Library providing common functions for calendaring plugins",
     "homepage": "https://git.kolab.org/diffusion/RPK/",
     "license": "AGPLv3",
-    "version": "3.2.8",
+    "version": "3.2.16",
     "authors": [
         {
             "name": "Thomas Bruederli",
@@ -15,7 +15,7 @@
     "repositories": [
         {
             "type": "composer",
-            "url": "http://plugins.roundcube.net"
+            "url": "https://plugins.roundcube.net"
         }
     ],
     "require": {
