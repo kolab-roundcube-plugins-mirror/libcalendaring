@@ -161,7 +161,7 @@ class libcalendaring_itip
         $message->setTXTBody(rcube_mime::format_flowed($mailbody, 79));
 
         if ($this->rc->config->get('libcalendaring_itip_debug', false)) {
-            rcmail::console('iTip ' . $method, $message->txtHeaders() . "\n\r" . $message->get());
+            rcube::console('iTip ' . $method, $message->txtHeaders() . "\r\n" . $message->get());
         }
 
         // finally send the message
@@ -406,8 +406,8 @@ class libcalendaring_itip
           else if (!$existing && !$rsvp) {
             $action = 'import';
           }
-          else if ($latest && $status_lc != 'needs-action') {
-            $action = 'update';
+          else if ($status_lc != 'needs-action') {
+            $action = !$latest ? 'update' : '';
           }
 
           $html = html::div('rsvp-status ' . $status_lc, $status_text);
@@ -492,13 +492,15 @@ class libcalendaring_itip
             $title = $this->gettext('itipreply');
 
             foreach ($event['attendees'] as $attendee) {
-                if (!empty($attendee['email']) && $attendee['role'] != 'ORGANIZER' &&
-                      (empty($event['_sender']) || ($attendee['email'] == $event['_sender'] || $attendee['email'] == $event['_sender_utf']))) {
-                    $metadata['attendee'] = $attendee['email'];
-                    $rsvp_status = strtoupper($attendee['status']);
-                    if ($attendee['delegated-to'])
-                        $metadata['delegated-to'] = $attendee['delegated-to'];
-                    break;
+                if (!empty($attendee['email']) && $attendee['role'] != 'ORGANIZER') {
+                    if (empty($event['_sender']) || self::compare_email($attendee['email'], $event['_sender'], $event['_sender_utf'])) {
+                        $metadata['attendee'] = $attendee['email'];
+                        $rsvp_status = strtoupper($attendee['status']);
+                        if ($attendee['delegated-to']) {
+                            $metadata['delegated-to'] = $attendee['delegated-to'];
+                        }
+                        break;
+                    }
                 }
             }
 
@@ -814,4 +816,14 @@ class libcalendaring_itip
       return $ret;
     }
 
+    /**
+     * Compare email address
+     */
+    public static function compare_email($value, $email, $email_utf = null)
+    {
+        $v1 = !empty($email) && strcasecmp($value, $email) === 0;
+        $v2 = !empty($email_utf) && strcasecmp($value, $email_utf) === 0;
+
+        return $v1 || $v2;
+    }
 }

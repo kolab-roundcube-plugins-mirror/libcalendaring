@@ -9,4 +9,7 @@
 $labels['until'] = 'tills';
 $labels['frequency'] = 'Upprepa';
 $labels['recurrencend'] = 'tills';
+$labels['statusorganizer'] = 'Organisatör';
+$labels['statustentative'] = 'Preliminärt';
+$labels['statusunknown'] = 'Okänd';
 $labels['savingdata'] = 'Sparar data ...';
