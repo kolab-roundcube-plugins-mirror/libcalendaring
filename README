@@ -9,7 +9,7 @@ Provides utility functions for calendar-related modules such as
 * iTip invitations handling
 
 iCal parsing and exporting is done with the help of the Sabre VObject
-library [1]. It needs to be insalled with Roundcube using composer:
+library [1]. It needs to be installed with Roundcube using composer:
 
   $ composer require "sabre/vobject" "~3.3.3"
 
