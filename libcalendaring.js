@@ -1287,9 +1287,13 @@ rcube_libcalendaring.update_itip_object_status = function(p)
     $('#rsvp-'+p.id+' input.button').prop('disabled', false)
       .filter('.'+String(p.status||'unknown').toLowerCase()).prop('disabled', p.latest);
   }
- 
+
   // show rsvp/import buttons (with calendar selector)
   $('#'+p.action+'-'+p.id).show().find('input.button').last().after(p.select);
+
+  // highlight date if date change detected
+  if (p.resheduled)
+    $('.calendar-eventdetails td.date').addClass('modified');
 
   // show itip box appendix after replacing the given placeholders
   if (p.append && p.append.selector) {
@@ -1380,11 +1384,6 @@ window.rcmail && rcmail.addEventListener('init', function(evt) {
   rcmail.addEventListener('plugin.update_itip_object_status', rcube_libcalendaring.update_itip_object_status)
     .addEventListener('plugin.fetch_itip_object_status', rcube_libcalendaring.fetch_itip_object_status)
     .addEventListener('plugin.itip_message_processed', rcube_libcalendaring.itip_message_processed);
-
-  $('.rsvp-buttons').on('click', 'a.reply-comment-toggle', function(e){
-    $(this).hide().parent().find('textarea').show().focus();
-    return false;
-  });
 
   if (rcmail.env.action == 'get-attachment' && rcmail.gui_objects['attachmentframe']) {
     rcmail.register_command('print-attachment', function() {

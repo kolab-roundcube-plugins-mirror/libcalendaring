@@ -1320,11 +1320,11 @@ class libcalendaring extends rcube_plugin
     public function mail_message_load($p)
     {
         $this->ical_message = $p['object'];
-        $itip_part     = null;
+        $itip_part          = null;
 
         // check all message parts for .ics files
         foreach ((array)$this->ical_message->mime_parts as $part) {
-            if (self::part_is_vcalendar($part)) {
+            if (self::part_is_vcalendar($part, $this->ical_message)) {
                 if ($part->ctype_parameters['method'])
                     $itip_part = $part->mime_id;
                 else
@@ -1438,10 +1438,24 @@ class libcalendaring extends rcube_plugin
      * Checks if specified message part is a vcalendar data
      *
      * @param rcube_message_part Part object
+     * @param rcube_message      Message object
+     *
      * @return boolean True if part is of type vcard
      */
-    public static function part_is_vcalendar($part)
+    public static function part_is_vcalendar($part, $message = null)
     {
+        // First check if the message is "valid" (i.e. not multipart/report)
+        if ($message) {
+            $level = explode('.', $part->mime_id);
+
+            while (array_pop($level) !== null) {
+                $parent = $message->mime_parts[join('.', $level) ?: 0];
+                if ($parent->mimetype == 'multipart/report') {
+                    return false;
+                }
+            }
+        }
+
         return (
             in_array($part->mimetype, array('text/calendar', 'text/x-vcalendar', 'application/ics')) ||
             // Apple sends files as application/x-any (!?)
