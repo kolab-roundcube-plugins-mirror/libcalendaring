@@ -176,6 +176,11 @@ function rcube_libcalendaring(settings)
      */
     this.parseISO8601 = function(s)
     {
+        // already a Date object?
+        if (s && s.getMonth) {
+            return s;
+        }
+
         // force d to be on check's YMD, for daylight savings purposes
         var fixDate = function(d, check) {
             if (+d) { // prevent infinite looping on invalid dates
@@ -1057,8 +1062,7 @@ function rcube_libcalendaring(settings)
         $(id).dialog('option', {
             height: Math.min(h-20, height+130),
             width: Math.min(w-20, width+50)
-        })
-        .dialog('option', 'position', ['center', 'center']);  // only works in a separate call (!?)
+        });
     };
 }
 

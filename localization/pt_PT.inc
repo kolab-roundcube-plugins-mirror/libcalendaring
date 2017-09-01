@@ -7,6 +7,7 @@
  * For translation see https://www.transifex.com/projects/p/kolab/resource/libcalendaring/
  */
 $labels['until'] = 'até';
+$labels['alarmemailoption'] = 'Email';
 $labels['frequency'] = 'Repetir';
 $labels['recurrencend'] = 'até';
 $labels['statusorganizer'] = 'Organizador';

@@ -80,6 +80,7 @@ $labels['statusorganizer'] = 'Organizador';
 $labels['statusaccepted'] = 'Aceptado';
 $labels['statustentative'] = 'Tentativo';
 $labels['statusdeclined'] = 'Rechazado';
+$labels['statusdelegated'] = 'Delegado';
 $labels['statusneeds-action'] = 'Necesita acción';
 $labels['statusunknown'] = 'Desconocido';
 $labels['statuscompleted'] = 'Completo';

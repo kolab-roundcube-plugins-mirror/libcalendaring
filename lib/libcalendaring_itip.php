@@ -161,7 +161,7 @@ class libcalendaring_itip
         $message->setTXTBody(rcube_mime::format_flowed($mailbody, 79));
 
         if ($this->rc->config->get('libcalendaring_itip_debug', false)) {
-            rcmail::console('iTip ' . $method, $message->txtHeaders() . "\n\r" . $message->get());
+            rcube::console('iTip ' . $method, $message->txtHeaders() . "\r\n" . $message->get());
         }
 
         // finally send the message

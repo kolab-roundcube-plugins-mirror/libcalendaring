@@ -67,16 +67,19 @@ class libcalendaring extends rcube_plugin
      */
     public static function get_instance()
     {
+        if (!self::$instance) {
+            self::$instance = new libcalendaring(rcube::get_instance()->plugins);
+            self::$instance->init_instance();
+        }
+
         return self::$instance;
     }
 
     /**
-     * Required plugin startup method
+     * Initializes class properties
      */
-    public function init()
+    public function init_instance()
     {
-        self::$instance = $this;
-
         $this->rc = rcube::get_instance();
 
         // set user's timezone
@@ -94,6 +97,17 @@ class libcalendaring extends rcube_plugin
         $this->timezone_offset = $this->gmt_offset / 3600 - $this->dst_active;
 
         $this->add_texts('localization/', false);
+    }
+
+    /**
+     * Required plugin startup method
+     */
+    public function init()
+    {
+        self::$instance = $this;
+
+        $this->rc = rcube::get_instance();
+        $this->init_instance();
 
         // include client scripts and styles
         if ($this->rc->output) {
@@ -123,7 +137,7 @@ class libcalendaring extends rcube_plugin
                 'statusorganizer', 'statusaccepted', 'statusdeclined',
                 'statusdelegated', 'statusunknown', 'statusneeds-action',
                 'statustentative', 'statuscompleted', 'statusin-process',
-                'delegatedto', 'delegatedfrom', 'showmore'
+                'delegatedto', 'delegatedfrom'
             );
         }
 
@@ -140,7 +154,7 @@ class libcalendaring extends rcube_plugin
     public static function get_ical()
     {
         $self = self::get_instance();
-        require_once($self->home . '/libvcalendar.php');
+        require_once __DIR__ . '/libvcalendar.php';
         return new libvcalendar();
     }
 
@@ -150,7 +164,7 @@ class libcalendaring extends rcube_plugin
     public static function get_itip($domain = 'libcalendaring')
     {
         $self = self::get_instance();
-        require_once($self->home . '/lib/libcalendaring_itip.php');
+        require_once __DIR__ . '/lib/libcalendaring_itip.php';
         return new libcalendaring_itip($self, $domain);
     }
 
@@ -160,7 +174,7 @@ class libcalendaring extends rcube_plugin
     public static function get_recurrence()
     {
         $self = self::get_instance();
-        require_once($self->home . '/lib/libcalendaring_recurrence.php');
+        require_once __DIR__ . '/lib/libcalendaring_recurrence.php';
         return new libcalendaring_recurrence($self);
     }
 
