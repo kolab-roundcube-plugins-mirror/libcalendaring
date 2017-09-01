@@ -97,6 +97,8 @@ $labels['statusneeds-action'] = 'Needs action';
 $labels['statusunknown'] = 'Unknown';
 $labels['statuscompleted'] = 'Completed';
 $labels['statusin-process'] = 'In process';
+$labels['delegatedto'] = 'Delegated to: ';
+$labels['delegatedfrom'] = 'Delegated from: ';
 
 // itip related labels
 $labels['itipinvitation'] = 'Invitation to';

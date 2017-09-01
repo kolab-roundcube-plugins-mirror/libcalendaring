@@ -393,8 +393,8 @@ class Horde_Date
      */
     public static function fromDays($days)
     {
-        if (function_exists('jdtogregorian')) {
-            list($month, $day, $year) = explode('/', jdtogregorian($days));
+        if (function_exists('JDToGregorian')) {
+            list($month, $day, $year) = explode('/', JDToGregorian($days));
         } else {
             $days = intval($days);
 

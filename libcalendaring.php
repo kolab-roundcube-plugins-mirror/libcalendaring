@@ -67,19 +67,16 @@ class libcalendaring extends rcube_plugin
      */
     public static function get_instance()
     {
-        if (!self::$instance) {
-            self::$instance = new libcalendaring(rcube::get_instance()->plugins);
-            self::$instance->init_instance();
-        }
-
         return self::$instance;
     }
 
     /**
-     * Initializes class properties
+     * Required plugin startup method
      */
-    public function init_instance()
+    public function init()
     {
+        self::$instance = $this;
+
         $this->rc = rcube::get_instance();
 
         // set user's timezone
@@ -97,17 +94,6 @@ class libcalendaring extends rcube_plugin
         $this->timezone_offset = $this->gmt_offset / 3600 - $this->dst_active;
 
         $this->add_texts('localization/', false);
-    }
-
-    /**
-     * Required plugin startup method
-     */
-    public function init()
-    {
-        self::$instance = $this;
-
-        $this->rc = rcube::get_instance();
-        $this->init_instance();
 
         // include client scripts and styles
         if ($this->rc->output) {
@@ -131,12 +117,13 @@ class libcalendaring extends rcube_plugin
             $this->include_script('libcalendaring.js');
             $this->include_stylesheet($this->local_skin_path() . '/libcal.css');
 
-            $this->rc->output->add_label(
-                'libcalendaring.itipaccepted', 'libcalendaring.itiptentative', 'libcalendaring.itipdeclined',
-                'libcalendaring.itipdelegated', 'libcalendaring.expandattendeegroup', 'libcalendaring.expandattendeegroupnodata',
-                'libcalendaring.statusorganizer', 'libcalendaring.statusaccepted', 'libcalendaring.statusdeclined',
-                'libcalendaring.statusdelegated', 'libcalendaring.statusunknown', 'libcalendaring.statusneeds-action',
-                'libcalendaring.statustentative', 'libcalendaring.statuscompleted', 'libcalendaring.statusin-process'
+            $this->add_label(
+                'itipaccepted', 'itiptentative', 'itipdeclined',
+                'itipdelegated', 'expandattendeegroup', 'expandattendeegroupnodata',
+                'statusorganizer', 'statusaccepted', 'statusdeclined',
+                'statusdelegated', 'statusunknown', 'statusneeds-action',
+                'statustentative', 'statuscompleted', 'statusin-process',
+                'delegatedto', 'delegatedfrom', 'showmore'
             );
         }
 
@@ -153,7 +140,7 @@ class libcalendaring extends rcube_plugin
     public static function get_ical()
     {
         $self = self::get_instance();
-        require_once __DIR__ . '/libvcalendar.php';
+        require_once($self->home . '/libvcalendar.php');
         return new libvcalendar();
     }
 
@@ -163,7 +150,7 @@ class libcalendaring extends rcube_plugin
     public static function get_itip($domain = 'libcalendaring')
     {
         $self = self::get_instance();
-        require_once __DIR__ . '/lib/libcalendaring_itip.php';
+        require_once($self->home . '/lib/libcalendaring_itip.php');
         return new libcalendaring_itip($self, $domain);
     }
 
@@ -173,7 +160,7 @@ class libcalendaring extends rcube_plugin
     public static function get_recurrence()
     {
         $self = self::get_instance();
-        require_once __DIR__ . '/lib/libcalendaring_recurrence.php';
+        require_once($self->home . '/lib/libcalendaring_recurrence.php');
         return new libcalendaring_recurrence($self);
     }
 
@@ -1506,18 +1493,23 @@ class libcalendaring extends rcube_plugin
      * Return the identifer for the given instance of a recurring event
      *
      * @param array Hash array with event properties
+     * @param bool  All-day flag from the main event
+     *
      * @return mixed Format string or null if identifier cannot be generated
      */
-    public static function recurrence_instance_identifier($event)
+    public static function recurrence_instance_identifier($event, $allday = null)
     {
         $instance_date = $event['recurrence_date'] ?: $event['start'];
 
         if ($instance_date && is_a($instance_date, 'DateTime')) {
-          $recurrence_id_format = $event['allday'] ? 'Ymd' : 'Ymd\THis';
-          return $instance_date->format($recurrence_id_format);
-        }
+            // According to RFC5545 (3.8.4.4) RECURRENCE-ID format should
+            // be date/date-time depending on the main event type, not the exception
+            if ($allday === null) {
+                $allday = $event['allday'];
+            }
 
-        return null;
+            return $instance_date->format($allday ? 'Ymd' : 'Ymd\THis');
+        }
     }
 
 

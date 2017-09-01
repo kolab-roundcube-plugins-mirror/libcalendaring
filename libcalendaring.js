@@ -94,6 +94,59 @@ function rcube_libcalendaring(settings)
       return fromto;
     };
 
+    /**
+     * Checks if the event/task has 'real' attendees, excluding the current user
+     */
+    this.has_attendees = function(event)
+    {
+        return !!(event.attendees && event.attendees.length && (event.attendees.length > 1 || String(event.attendees[0].email).toLowerCase() != settings.identity.email));
+    };
+
+    /**
+     * Check if the current user is an attendee of this event/task
+     */
+    this.is_attendee = function(event, role, email)
+    {
+        var i, emails = email ? ';' + email.toLowerCase() : settings.identity.emails;
+
+        for (i=0; event.attendees && i < event.attendees.length; i++) {
+            if ((!role || event.attendees[i].role == role) && event.attendees[i].email && emails.indexOf(';'+event.attendees[i].email.toLowerCase()) >= 0) {
+                return event.attendees[i];
+            }
+        }
+
+        return false;
+    };
+
+    /**
+     * Checks if the current user is the organizer of the event/task
+     */
+    this.is_organizer = function(event, email)
+    {
+        return this.is_attendee(event, 'ORGANIZER', email) || !event.id;
+    };
+
+    /**
+     * Check permissions on the given folder object
+     */
+    this.has_permission = function(folder, perm)
+    {
+        // multiple chars means "either of"
+        if (String(perm).length > 1) {
+            for (var i=0; i < perm.length; i++) {
+                if (this.has_permission(folder, perm[i])) {
+                    return true;
+                }
+            }
+        }
+
+        if (folder.rights && String(folder.rights).indexOf(perm) >= 0) {
+            return true;
+        }
+
+        return (perm == 'i' && folder.editable) || (perm == 'v' && folder.editable);
+    };
+
 
     /**
      * From time and date strings to a real date object
@@ -123,11 +176,6 @@ function rcube_libcalendaring(settings)
      */
     this.parseISO8601 = function(s)
     {
-        // already a Date object?
-        if (s && s.getMonth) {
-            return s;
-        }
-
         // force d to be on check's YMD, for daylight savings purposes
         var fixDate = function(d, check) {
             if (+d) { // prevent infinite looping on invalid dates
@@ -1000,6 +1048,18 @@ function rcube_libcalendaring(settings)
 
         container.empty().append(ul);
     }
+
+    // resize and reposition (center) the dialog window
+    this.dialog_resize = function(id, height, width)
+    {
+        var win = $(window), w = win.width(), h = win.height();
+
+        $(id).dialog('option', {
+            height: Math.min(h-20, height+130),
+            width: Math.min(w-20, width+50)
+        })
+        .dialog('option', 'position', ['center', 'center']);  // only works in a separate call (!?)
+    };
 }
 
 //////  static methods
@@ -1026,9 +1086,9 @@ rcube_libcalendaring.attendee_html = function(data)
     }
 
     if (data['delegated-to'])
-        tooltip = rcmail.gettext('delegatedto', context) + data['delegated-to'];
+        tooltip = rcmail.gettext('delegatedto', context) + ' ' + data['delegated-to'];
     else if (data['delegated-from'])
-        tooltip = rcmail.gettext('delegatedfrom', context) + data['delegated-from'];
+        tooltip = rcmail.gettext('delegatedfrom', context) + ' ' + data['delegated-from'];
 
     return $('<span>').append(
             $('<span>').attr({'class': 'attendee ' + status, title: tooltip}).append(name.text(dispname))

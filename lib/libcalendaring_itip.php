@@ -161,7 +161,7 @@ class libcalendaring_itip
         $message->setTXTBody(rcube_mime::format_flowed($mailbody, 79));
 
         if ($this->rc->config->get('libcalendaring_itip_debug', false)) {
-            rcube::console('iTip ' . $method, $message->txtHeaders() . "\r\n" . $message->get());
+            rcmail::console('iTip ' . $method, $message->txtHeaders() . "\n\r" . $message->get());
         }
 
         // finally send the message
@@ -258,6 +258,21 @@ class libcalendaring_itip
         else if ($method == 'CANCEL') {
             if ($event['recurrence']) {
                 unset($event['recurrence']['EXCEPTIONS']);
+            }
+        }
+
+        // Set SENT-BY property if the sender is not the organizer
+        if ($method == 'CANCEL' || $method == 'REQUEST') {
+            foreach ((array)$event['attendees'] as $idx => $attendee) {
+                if ($attendee['role'] == 'ORGANIZER'
+                    && $attendee['email']
+                    && strcasecmp($attendee['email'], $from) != 0
+                    && strcasecmp($attendee['email'], $from_utf) != 0
+                ) {
+                    $attendee['sent-by'] = 'mailto:' . $from_utf;
+                    $event['organizer'] = $event['attendees'][$idx] = $attendee;
+                    break;
+                }
             }
         }
 
