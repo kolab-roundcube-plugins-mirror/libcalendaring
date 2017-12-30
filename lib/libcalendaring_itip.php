@@ -374,7 +374,7 @@ class libcalendaring_itip
     {
       $action = $event['rsvp'] ? 'rsvp' : '';
       $status = $event['fallback'];
-      $latest = $resheduled = false;
+      $latest = $rescheduled = false;
       $html   = '';
 
       if (is_numeric($event['changed']))
@@ -404,7 +404,7 @@ class libcalendaring_itip
           if (!$latest) {
             // FIXME: This is probably to simplistic, or maybe we should just check
             //        attendee's RSVP flag in the new event?
-            $resheduled = $existing['start'] != $event['start'] || $existing['end'] > $event['end'];
+            $rescheduled = $existing['start'] != $event['start'] || $existing['end'] > $event['end'];
           }
         }
         else {
@@ -428,10 +428,16 @@ class libcalendaring_itip
           else if (!$existing && !$rsvp) {
             $action = 'import';
           }
-          else if ($resheduled) {
+          else if ($rescheduled) {
             $action = 'rsvp';
           }
           else if ($status_lc != 'needs-action') {
+            // check if there are any changes
+            if ($latest) {
+              $diff   = $this->get_itip_diff($event, $existing);
+              $latest = empty($diff);
+            }
+
             $action = !$latest ? 'update' : '';
           }
 
@@ -485,9 +491,67 @@ class libcalendaring_itip
           'latest'     => $latest,
           'status'     => $status,
           'action'     => $action,
-          'resheduled' => $resheduled,
+          'rescheduled' => $rescheduled,
           'html'       => $html,
       );
+    }
+
+    protected function get_itip_diff($event, $existing)
+    {
+        if (empty($event) || empty($existing) || empty($event['message_uid'])) {
+            return;
+        }
+
+        $itip = $this->lib->mail_get_itip_object($event['mbox'], $event['message_uid'], $event['mime_id'],
+            $event['task'] == 'calendar' ? 'event' : 'task');
+
+        if ($itip) {
+            // List of properties that could change without SEQUENCE bump
+            $attrs = array('description', 'title', 'location', 'url');
+            $diff  = array();
+
+            foreach ($attrs as $attr) {
+                if (isset($itip[$attr]) && $itip[$attr] != $existing[$attr]) {
+                    $diff[$attr] = array(
+                        'new' => $itip[$attr],
+                        'old' => $existing[$attr]
+                    );
+                }
+            }
+
+            $status             = array();
+            $itip_attendees     = array();
+            $existing_attendees = array();
+            $emails             = $this->lib->get_user_emails();
+
+            // Compare list of attendees (ignoring current user status)
+            foreach ((array) $existing['attendees'] as $idx => $attendee) {
+                if ($attendee['email'] && in_array(strtolower($attendee['email']), $emails)) {
+                    $status[strtolower($attendee['email'])] = $attendee['status'];
+                }
+                if ($attendee['role'] == 'ORGANIZER') {
+                    $attendee['status'] = 'ACCEPTED'; // sometimes is not set for exceptions
+                    $existing['attendees'][$idx] = $attendee;
+                }
+                $existing_attendees[] = $attendee['email'].$attendee['name'];
+            }
+            foreach ((array) $itip['attendees'] as $idx => $attendee) {
+                if ($attendee['email'] && ($_status = $status[strtolower($attendee['email'])])) {
+                    $attendee['status'] = $_status;
+                    $itip['attendees'][$idx] = $attendee;
+                }
+                $itip_attendees[] = $attendee['email'].$attendee['name'];
+            }
+
+            if ($itip_attendees != $existing_attendees) {
+                $diff['attendees'] = array(
+                    'new' => $itip['attendees'],
+                    'old' => $existing['attendees']
+                );
+            }
+
+            return $diff;
+        }
     }
 
     /**
@@ -508,6 +572,7 @@ class libcalendaring_itip
             'sequence' => intval($event['sequence']),
             'method'   => $method,
             'task'     => $task,
+            'mime_id'  => $mime_id,
         );
 
         // create buttons to be activated from async request checking existence of this event in local calendars
@@ -791,11 +856,11 @@ class libcalendaring_itip
             $table->add('label', $this->gettext('recurring'));
             $table->add('recurrence', $this->lib->recurrence_text($event['recurrence']));
         }
-        if ($event['location']) {
+        if ($event['location'] && trim($event['location'])) {
             $table->add('label', $this->gettext('location'));
             $table->add('location', rcube::Q($event['location']));
         }
-        if ($event['sensitivity'] && $event['sensitivity'] != 'public') {
+        if ($event['sensitivity'] && !preg_match('/^(x-|public$)/i', $event['sensitivity'])) {
             $table->add('label', $this->gettext('sensitivity'));
             $table->add('sensitivity', ucfirst($this->gettext($event['sensitivity'])) . '!');
         }
@@ -803,7 +868,7 @@ class libcalendaring_itip
             $table->add('label', $this->gettext('status'));
             $table->add('status', $this->gettext('status-' . strtolower($event['status'])));
         }
-        if ($event['comment']) {
+        if ($event['comment'] && trim($event['comment'])) {
             $table->add('label', $this->gettext('comment'));
             $table->add('location', rcube::Q($event['comment']));
         }

@@ -175,6 +175,8 @@ $labels['delegateinvitation'] = 'Delegate Invitation';
 $labels['delegateto'] = 'Delegate to';
 $labels['delegatersvpme'] = 'Keep me informed about updates of this incidence';
 $labels['delegateinvalidaddress'] = 'Please enter a valid email address for the delegate';
+$labels['delegatedto'] = 'Delegated to:';
+$labels['delegatedfrom'] = 'Delegated from:';
 
 $labels['savingdata'] = 'Saving data...';
 

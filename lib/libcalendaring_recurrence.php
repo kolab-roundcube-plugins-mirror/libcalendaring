@@ -152,4 +152,83 @@ class libcalendaring_recurrence
         return $last;
     }
 
+    /**
+     * Find date/time of the first occurrence (excluding start date)
+     */
+    public function first_occurrence()
+    {
+        $start      = clone $this->start;
+        $orig_start = clone $this->start;
+        $r          = $this->recurrence;
+        $interval   = intval($r['INTERVAL'] ?: 1);
+
+        switch ($this->recurrence['FREQ']) {
+        case 'WEEKLY':
+            if (empty($this->recurrence['BYDAY'])) {
+                return $start;
+            }
+
+            $start->sub(new DateInterval("P{$interval}W"));
+            break;
+
+        case 'MONTHLY':
+            if (empty($this->recurrence['BYDAY']) && empty($this->recurrence['BYMONTHDAY'])) {
+                return $start;
+            }
+
+            $start->sub(new DateInterval("P{$interval}M"));
+            break;
+
+        case 'YEARLY':
+            if (empty($this->recurrence['BYDAY']) && empty($this->recurrence['BYMONTH'])) {
+                return $start;
+            }
+
+            $start->sub(new DateInterval("P{$interval}Y"));
+            break;
+
+        default:
+            return $start;
+        }
+
+        $r = $this->recurrence;
+        $r['INTERVAL'] = $interval;
+        if ($r['COUNT']) {
+            // Increase count so we do not stop the loop to early
+            $r['COUNT'] += 100;
+        }
+
+        // Create recurrence that starts in the past
+        $recurrence = new self($this->lib);
+        $recurrence->init($r, $start);
+
+        // find the first occurrence
+        $found = false;
+        while ($next = $recurrence->next()) {
+            $start = $next;
+            if ($next >= $orig_start) {
+                $found = true;
+                break;
+            }
+        }
+
+        if (!$found) {
+            rcube::raise_error(array(
+                'file' => __FILE__,
+                'line' => __LINE__,
+                'message' => sprintf("Failed to find a first occurrence. Start: %s, Recurrence: %s",
+                    $orig_start->format(DateTime::ISO8601), json_encode($r)),
+            ), true);
+
+            return null;
+        }
+
+        if ($start Instanceof Horde_Date) {
+            $start = $start->toDateTime();
+        }
+
+        $start->_dateonly = $this->dateonly;
+
+        return $start;
+    }
 }
