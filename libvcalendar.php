@@ -430,7 +430,7 @@ class libvcalendar implements Iterator
             case 'DTEND':
             case 'DUE':
                 $propmap = array('DTSTART' => 'start', 'DTEND' => 'end', 'DUE' => 'due');
-                $event[$propmap[$prop->name]] =  self::convert_datetime($prop);
+                $event[$propmap[$prop->name]] = self::convert_datetime($prop);
                 break;
 
             case 'TRANSP':
@@ -694,16 +694,14 @@ class libvcalendar implements Iterator
 
         // assign current timezone to event start/end
         if ($event['start'] instanceof DateTime) {
-            if ($this->timezone)
-                $event['start']->setTimezone($this->timezone);
+            $this->_apply_timezone($event['start']);
         }
         else {
             unset($event['start']);
         }
 
         if ($event['end'] instanceof DateTime) {
-            if ($this->timezone)
-                $event['end']->setTimezone($this->timezone);
+            $this->_apply_timezone($event['end']);
         }
         else {
             unset($event['end']);
@@ -726,6 +724,27 @@ class libvcalendar implements Iterator
         }
 
         return $event;
+    }
+
+    /**
+     * Apply user timezone to DateTime object
+     */
+    private function _apply_timezone(&$date)
+    {
+        if (empty($this->timezone)) {
+            return;
+        }
+
+        // For date-only we'll keep the date and time intact
+        if ($date->_dateonly) {
+            $dt = new DateTime(null, $this->timezone);
+            $dt->setDate($date->format('Y'), $date->format('n'), $date->format('j'));
+            $dt->setTime($date->format('G'), $date->format('i'), 0);
+            $date = $dt;
+        }
+        else {
+            $date->setTimezone($this->timezone);
+        }
     }
 
     /**
@@ -763,7 +782,7 @@ class libvcalendar implements Iterator
 
                 // skip dupes
                 if ($seen[$value.':'.$fbtype]++)
-                    continue;
+                    break;
 
                 foreach ($periods as $period) {
                     // Every period is formatted as [start]/[end]. The start is an
@@ -816,7 +835,6 @@ class libvcalendar implements Iterator
         if (empty($prop)) {
             return $as_array ? array() : null;
         }
-
         else if ($prop instanceof VObject\Property\iCalendar\DateTime) {
             if (count($prop->getDateTimes()) > 1) {
                 $dt = array();
@@ -1072,18 +1090,15 @@ class libvcalendar implements Iterator
 
             // add EXDATEs each one per line (for Thunderbird Lightning)
             if (is_array($exdates)) {
-                foreach ($exdates as $ex) {
-                    if ($ex instanceof \DateTime) {
-                        $exd = clone $event['start'];
-                        $exd->setDate($ex->format('Y'), $ex->format('n'), $ex->format('j'));
-                        $exd->setTimeZone(new \DateTimeZone('UTC'));
-                        $ve->add($this->datetime_prop($cal, 'EXDATE', $exd, true));
+                foreach ($exdates as $exdate) {
+                    if ($exdate instanceof DateTime) {
+                        $ve->add($this->datetime_prop($cal, 'EXDATE', $exdate));
                     }
                 }
             }
             // add RDATEs
-            if (!empty($rdates)) {
-                foreach ((array)$rdates as $rdate) {
+            if (is_array($rdates)) {
+                foreach ($rdates as $rdate) {
                     $ve->add($this->datetime_prop($cal, 'RDATE', $rdate));
                 }
             }
@@ -1294,12 +1309,15 @@ class libvcalendar implements Iterator
      * @param string Timezone ID as used in PHP's Date functions
      * @param integer Unix timestamp with first date/time in this timezone
      * @param integer Unix timestap with last date/time in this timezone
+     * @param VObject\Component\VCalendar Optional VCalendar component
      *
      * @return mixed A Sabre\VObject\Component object representing a VTIMEZONE definition
      *               or false if no timezone information is available
      */
     public static function get_vtimezone($tzid, $from = 0, $to = 0, $cal = null)
     {
+        // TODO: Consider using tzurl.org database for better interoperability e.g. with Outlook
+
         if (!$from) $from = time();
         if (!$to)   $to = $from;
         if (!$cal)  $cal = new VObject\Component\VCalendar();
@@ -1323,6 +1341,17 @@ class libvcalendar implements Iterator
         $year = 86400 * 360;
         $transitions = $tz->getTransitions($from - $year, $to + $year);
 
+        // Make sure VTIMEZONE contains at least one STANDARD/DAYLIGHT component
+        // when there's only one transition in specified time period (T5626)
+        if (count($transitions) == 1) {
+            // Get more transitions and use OFFSET from the previous to last
+            $more_transitions = $tz->getTransitions(0, $to + $year);
+            if (count($more_transitions) > 1) {
+                $index  = count($more_transitions) - 2;
+                $tzfrom = $more_transitions[$index]['offset'] / 3600;
+            }
+        }
+
         $vt = $cal->createComponent('VTIMEZONE');
         $vt->TZID = $tz->getName();
 
@@ -1330,7 +1359,7 @@ class libvcalendar implements Iterator
         foreach ($transitions as $i => $trans) {
             $cmp = null;
 
-            if ($i == 0) {
+            if (!isset($tzfrom)) {
                 $tzfrom = $trans['offset'] / 3600;
                 continue;
             }
