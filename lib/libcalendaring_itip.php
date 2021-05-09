@@ -118,14 +118,15 @@ class libcalendaring_itip
         // compose a list of all event attendees
         $attendees_list = array();
         foreach ((array)$event['attendees'] as $attendee) {
-            $attendees_list[] = ($attendee['name'] && $attendee['email']) ?
+            $attendees_list[] = (!empty($attendee['name']) && !empty($attendee['email'])) ?
                 $attendee['name'] . ' <' . $attendee['email'] . '>' :
-                ($attendee['name'] ? $attendee['name'] : $attendee['email']);
+                (!empty($attendee['name']) ? $attendee['name'] : $attendee['email']);
         }
 
         $recurrence_info = '';
         if (!empty($event['recurrence_id'])) {
-            $recurrence_info = "\n\n** " . $this->gettext($event['thisandfuture'] ? 'itipmessagefutureoccurrence' : 'itipmessagesingleoccurrence') . ' **';
+            $msg = $this->gettext(!empty($event['thisandfuture']) ? 'itipmessagefutureoccurrence' : 'itipmessagesingleoccurrence');
+            $recurrence_info = "\n\n** $msg **";
         }
         else if (!empty($event['recurrence'])) {
             $recurrence_info = sprintf("\n%s: %s", $this->gettext('recurring'), $this->lib->recurrence_text($event['recurrence']));
@@ -139,7 +140,7 @@ class libcalendaring_itip
                 'attendees'   => join(",\n ", $attendees_list),
                 'sender'      => $this->sender['name'],
                 'organizer'   => $this->sender['name'],
-                'description' => $event['description'],
+                'description' => isset($event['description']) ? $event['description'] : '',
             )
         ));
 
@@ -243,8 +244,14 @@ class libcalendaring_itip
         // set RSVP for every attendee
         else if ($method == 'REQUEST') {
             foreach ($event['attendees'] as $i => $attendee) {
-                if (($rsvp || !isset($attendee['rsvp'])) && ($attendee['status'] != 'DELEGATED' && $attendee['role'] != 'NON-PARTICIPANT')) {
-                    $event['attendees'][$i]['rsvp']= (bool)$rsvp;
+                if (
+                    ($rsvp || !isset($attendee['rsvp']))
+                    && (
+                        (empty($attendee['status']) || $attendee['status'] != 'DELEGATED')
+                        && $attendee['role'] != 'NON-PARTICIPANT'
+                    )
+                ) {
+                    $event['attendees'][$i]['rsvp']= (bool) $rsvp;
                 }
             }
         }
@@ -293,7 +300,7 @@ class libcalendaring_itip
         // attach ics file for this event
         $ical = libcalendaring::get_ical();
         $ics = $ical->export(array($event), $method, false, $method == 'REQUEST' && $this->plugin->driver ? array($this->plugin->driver, 'get_attachment_body') : false);
-        $filename = $event['_type'] == 'task' ? 'todo.ics' : 'event.ics';
+        $filename = !empty($event['_type']) && $event['_type'] == 'task' ? 'todo.ics' : 'event.ics';
         $message->addAttachment($ics, 'text/calendar', $filename, false, '8bit', '', RCUBE_CHARSET . "; method=" . $method);
 
         return $message;
@@ -521,7 +528,7 @@ class libcalendaring_itip
 
     protected function get_itip_diff($event, $existing)
     {
-        if (empty($event) || empty($existing) || empty($event['message_uid'])) {
+        if (empty($event) || empty($existing) || empty($event['message_uid']) || empty($event['mime_id'])) {
             return;
         }
 
@@ -556,14 +563,14 @@ class libcalendaring_itip
                     $attendee['status'] = 'ACCEPTED'; // sometimes is not set for exceptions
                     $existing['attendees'][$idx] = $attendee;
                 }
-                $existing_attendees[] = $attendee['email'].$attendee['name'];
+                $existing_attendees[] = $attendee['email'] . (isset($attendee['name']) ? $attendee['name'] : '');
             }
             foreach ((array) $itip['attendees'] as $idx => $attendee) {
-                if ($attendee['email'] && ($_status = $status[strtolower($attendee['email'])])) {
-                    $attendee['status'] = $_status;
+                if (!empty($attendee['email']) && !empty($status[strtolower($attendee['email'])])) {
+                    $attendee['status'] = $status[strtolower($attendee['email'])];
                     $itip['attendees'][$idx] = $attendee;
                 }
-                $itip_attendees[] = $attendee['email'].$attendee['name'];
+                $itip_attendees[] = $attendee['email'] . (isset($attendee['name']) ? $attendee['name'] : '');
             }
 
             if ($itip_attendees != $existing_attendees) {
@@ -597,14 +604,16 @@ class libcalendaring_itip
     public function mail_itip_inline_ui($event, $method, $mime_id, $task, $message_date = null, $preview_url = null)
     {
         $buttons = array();
-        $dom_id = asciiwords($event['uid'], true);
-        $rsvp_status = 'unknown';
+        $dom_id  = asciiwords($event['uid'], true);
+
+        $rsvp_status  = 'unknown';
+        $rsvp_buttons = '';
 
         // pass some metadata about the event and trigger the asynchronous status check
         $changed = is_object($event['changed']) ? $event['changed'] : $message_date;
         $metadata = array(
             'uid'      => $event['uid'],
-            '_instance' => $event['_instance'],
+            '_instance' => isset($event['_instance']) ? $event['_instance'] : null,
             'changed'  => $changed ? $changed->format('U') : 0,
             'sequence' => intval($event['sequence']),
             'method'   => $method,
@@ -744,7 +753,7 @@ class libcalendaring_itip
             }
 
             // add itip reply message controls
-            $rsvp_buttons .= html::div('itip-reply-controls', $this->itip_rsvp_options_ui($dom_id, $metadata['nosave']));
+            $rsvp_buttons .= html::div('itip-reply-controls', $this->itip_rsvp_options_ui($dom_id, !empty($metadata['nosave'])));
 
             $buttons[] = html::div(array('id' => 'rsvp-'.$dom_id, 'class' => 'rsvp-buttons', 'style' => 'display:none'), $rsvp_buttons);
             $buttons[] = html::div(array('id' => 'update-'.$dom_id, 'style' => 'display:none'), $update_button);
@@ -759,8 +768,8 @@ class libcalendaring_itip
             $title = $this->gettext('itipcancellation');
             $event_prop = array_filter(array(
                 'uid'       => $event['uid'],
-                '_instance' => $event['_instance'],
-                '_savemode' => $event['_savemode'],
+                '_instance' => isset($event['_instance']) ? $event['_instance'] : null,
+                '_savemode' => isset($event['_savemode']) ? $event['_savemode'] : null,
             ));
 
             // 1. remove the event from our calendar
@@ -786,7 +795,7 @@ class libcalendaring_itip
         }
 
         // append generic import button
-        if ($import_button) {
+        if (!empty($import_button)) {
             $buttons[] = html::div(array('id' => 'import-'.$dom_id, 'style' => 'display:none'), $import_button);
         }
 
@@ -815,13 +824,16 @@ class libcalendaring_itip
     {
         $attrib += array('type' => 'button');
 
-        if (!$actions)
+        if (!$actions) {
             $actions = $this->rsvp_actions;
+        }
+
+        $buttons = '';
 
         foreach ($actions as $method) {
             $buttons .= html::tag('input', array(
                 'type'  => $attrib['type'],
-                'name'  => $attrib['iname'],
+                'name'  => !empty($attrib['iname']) ? $attrib['iname'] : null,
                 'class' => 'button',
                 'rel'   => $method,
                 'value' => $this->gettext('itip' . $method),
@@ -923,7 +935,7 @@ class libcalendaring_itip
             $table->add('label', $this->gettext('recurring'));
             $table->add('recurrence', $this->lib->recurrence_text($event['recurrence']));
         }
-        if ($location = trim($event['location'])) {
+        if (isset($event['location']) && ($location = trim($event['location']))) {
             $table->add('label', $this->gettext('location'));
             $table->add('location', rcube::Q($location));
         }
@@ -931,11 +943,11 @@ class libcalendaring_itip
             $table->add('label', $this->gettext('sensitivity'));
             $table->add('sensitivity', ucfirst($this->gettext($sensitivity)) . '!');
         }
-        if ($event['status'] == 'COMPLETED' || $event['status'] == 'CANCELLED') {
+        if (!empty($event['status']) && ($event['status'] == 'COMPLETED' || $event['status'] == 'CANCELLED')) {
             $table->add('label', $this->gettext('status'));
             $table->add('status', $this->gettext('status-' . strtolower($event['status'])));
         }
-        if ($comment = trim($event['comment'])) {
+        if (isset($event['comment']) && ($comment = trim($event['comment']))) {
             $table->add('label', $this->gettext('comment'));
             $table->add('location', rcube::Q($comment));
         }

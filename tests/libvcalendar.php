@@ -21,7 +21,7 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-class libvcalendar_test extends PHPUnit_Framework_TestCase
+class libvcalendar_test extends PHPUnit\Framework\TestCase
 {
     function setUp()
     {
@@ -209,7 +209,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals('-PT30M', $alarm[3], "Unified alarm string (stripped zero-values)");
 
         $this->assertEquals('DISPLAY', $event['valarms'][0]['action'],  "First alarm action");
-        $this->assertEquals('', $event['valarms'][0]['related'],  "First alarm related property");
+        $this->assertTrue(empty($event['valarms'][0]['related']),  "First alarm related property");
         $this->assertEquals('This is the first event reminder', $event['valarms'][0]['description'],  "First alarm text");
 
         $this->assertEquals(3, count($event['valarms']), "List all VALARM blocks");
@@ -553,7 +553,7 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals('4', $vtz->{'X-MICROSOFT-CDO-TZID'});
 
         // check for transition to daylight saving time which is BEFORE the given date
-        $dst = reset($vtz->select('DAYLIGHT'));
+        $dst = array_first($vtz->select('DAYLIGHT'));
         $this->assertEquals('DAYLIGHT', $dst->name);
         $this->assertEquals('20140330T010000', $dst->DTSTART);
         $this->assertEquals('+0100', $dst->TZOFFSETFROM);
@@ -561,7 +561,8 @@ class libvcalendar_test extends PHPUnit_Framework_TestCase
         $this->assertEquals('CEST', $dst->TZNAME);
 
         // check (last) transition to standard time which is AFTER the given date
-        $std = end($vtz->select('STANDARD'));
+        $std = $vtz->select('STANDARD');
+        $std = end($std);
         $this->assertEquals('STANDARD', $std->name);
         $this->assertEquals('20141026T010000', $std->DTSTART);
         $this->assertEquals('+0200', $std->TZOFFSETFROM);
