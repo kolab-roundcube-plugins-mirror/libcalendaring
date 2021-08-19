@@ -127,14 +127,14 @@ class libcalendaring_recurrence
     public function end()
     {
         // recurrence end date is given
-        if ($this->recurrence['UNTIL'] instanceof DateTime) {
+        if ($this->recurrence['UNTIL'] instanceof DateTime || $this->recurrence['UNTIL'] instanceof DateTimeImmutable) {
             return $this->recurrence['UNTIL'];
         }
 
         // take the last RDATE entry if set
         if (is_array($this->recurrence['RDATE']) && !empty($this->recurrence['RDATE'])) {
             $last = end($this->recurrence['RDATE']);
-            if ($last instanceof DateTime) {
+            if ($last instanceof DateTime || $last instanceof DateTimeImmutable) {
               return $last;
             }
         }

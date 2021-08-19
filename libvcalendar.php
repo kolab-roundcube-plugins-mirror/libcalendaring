@@ -149,7 +149,7 @@ class libvcalendar implements Iterator
                 }
             }
 
-            $vobject = VObject\Reader::read($vcal, VObject\Reader::OPTION_FORGIVING | VObject\Reader::OPTION_IGNORE_INVALID_LINES);
+            $vobject = Sabre\VObject\Reader::read($vcal, Sabre\VObject\Reader::OPTION_FORGIVING | Sabre\VObject\Reader::OPTION_IGNORE_INVALID_LINES);
             if ($vobject)
                 return $this->import_from_vobject($vobject);
         }
@@ -247,7 +247,7 @@ class libvcalendar implements Iterator
             }
             catch (Exception $e) {
                 if ($this->forward_exceptions) {
-                    throw new VObject\ParseException($e->getMessage() . " in\n" . $buffer);
+                    throw new Sabre\VObject\ParseException($e->getMessage() . " in\n" . $buffer);
                 }
                 else {
                     // write the failing section to error log
@@ -421,8 +421,8 @@ class libvcalendar implements Iterator
         }
 
         // map other attributes to internal fields
-        foreach ($ve->children as $prop) {
-            if (!($prop instanceof VObject\Property))
+        foreach ($ve->children() as $prop) {
+            if (!($prop instanceof Sabre\VObject\Property))
                 continue;
 
             $value = strval($prop);
@@ -645,7 +645,7 @@ class libvcalendar implements Iterator
             $trigger = null;
             $alarm   = array();
 
-            foreach ($valarm->children as $prop) {
+            foreach ($valarm->children() as $prop) {
                 $value = strval($prop);
 
                 switch ($prop->name) {
@@ -713,14 +713,14 @@ class libvcalendar implements Iterator
         }
 
         // assign current timezone to event start/end
-        if (!empty($event['start']) && $event['start'] instanceof DateTime) {
+        if (!empty($event['start']) && ($event['start'] instanceof DateTime || $event['start'] instanceof DateTimeImmutable)) {
             $this->_apply_timezone($event['start']);
         }
         else {
             unset($event['start']);
         }
 
-        if (!empty($event['end']) && $event['end'] instanceof DateTime) {
+        if (!empty($event['end']) && ($event['end'] instanceof DateTimeImmutable || $event['end'] instanceof DateTimeImmutable)) {
             $this->_apply_timezone($event['end']);
         }
         else {
@@ -740,7 +740,7 @@ class libvcalendar implements Iterator
 
         // minimal validation
         if (empty($event['uid']) || ($event['_type'] == 'event' && empty($event['start']) != empty($event['end']))) {
-            throw new VObject\ParseException('Object validation failed: missing mandatory object properties');
+            throw new Sabre\VObject\ParseException('Object validation failed: missing mandatory object properties');
         }
 
         return $event;
@@ -775,8 +775,8 @@ class libvcalendar implements Iterator
         $this->freebusy = array('_type' => 'freebusy', 'periods' => array());
         $seen = array();
 
-        foreach ($ve->children as $prop) {
-            if (!($prop instanceof VObject\Property))
+        foreach ($ve->children() as $prop) {
+            if (!($prop instanceof Sabre\VObject\Property))
                 continue;
 
             $value = strval($prop);
@@ -864,7 +864,7 @@ class libvcalendar implements Iterator
         if (empty($prop)) {
             return $as_array ? array() : null;
         }
-        else if ($prop instanceof VObject\Property\iCalendar\DateTime) {
+        else if ($prop instanceof Sabre\VObject\Property\iCalendar\DateTime) {
             if (count($prop->getDateTimes()) > 1) {
                 $dt = array();
                 $dateonly = !$prop->hasTime();
@@ -880,7 +880,7 @@ class libvcalendar implements Iterator
                 }
             }
         }
-        else if ($prop instanceof VObject\Property\iCalendar\Period) {
+        else if ($prop instanceof Sabre\VObject\Property\iCalendar\Period) {
             $dt = array();
             foreach ($prop->getParts() as $val) {
                 try {
@@ -903,7 +903,7 @@ class libvcalendar implements Iterator
                 }
             }
         }
-        else if ($prop instanceof \DateTime) {
+        else if ($prop instanceof \DateTime || $prop instanceof \DateTimeImmutable) {
             $dt = $prop;
         }
 
@@ -1000,7 +1000,7 @@ class libvcalendar implements Iterator
         $this->method = $method;
 
         // encapsulate in VCALENDAR container
-        $vcal = new VObject\Component\VCalendar();
+        $vcal = new Sabre\VObject\Component\VCalendar();
         $vcal->VERSION = '2.0';
         $vcal->PRODID = $this->prodid;
         $vcal->CALSCALE = 'GREGORIAN';
@@ -1056,7 +1056,7 @@ class libvcalendar implements Iterator
     {
         $type = !empty($event['_type']) ? $event['_type'] : 'event';
 
-        $cal = $vcal ?: new VObject\Component\VCalendar();
+        $cal = $vcal ?: new Sabre\VObject\Component\VCalendar();
         $ve = $cal->create($this->type_component_map[$type]);
         $ve->UID = $event['uid'];
 
@@ -1087,7 +1087,7 @@ class libvcalendar implements Iterator
         }
 
         // we're exporting a recurrence instance only
-        if (!$recurrence_id && !empty($event['recurrence_date']) && $event['recurrence_date'] instanceof DateTime) {
+        if (!$recurrence_id && !empty($event['recurrence_date']) && ($event['recurrence_date'] instanceof DateTime || $event['recurrence_date'] instanceof DateTimeImmutable)) {
             $recurrence_id = $this->datetime_prop($cal, 'RECURRENCE-ID', $event['recurrence_date'], false, !empty($event['allday']));
             if (!empty($event['thisandfuture'])) {
                 $recurrence_id->add('RANGE', 'THISANDFUTURE');
@@ -1129,7 +1129,7 @@ class libvcalendar implements Iterator
             // add EXDATEs each one per line (for Thunderbird Lightning)
             if (is_array($exdates)) {
                 foreach ($exdates as $exdate) {
-                    if ($exdate instanceof DateTime) {
+                    if ($exdate instanceof DateTime || $exdate instanceof DateTimeImmutable) {
                         $ve->add($this->datetime_prop($cal, 'EXDATE', $exdate));
                     }
                 }
@@ -1194,7 +1194,7 @@ class libvcalendar implements Iterator
             foreach ($event['valarms'] as $alarm) {
                 $va = $cal->createComponent('VALARM');
                 $va->action = $alarm['action'];
-                if ($alarm['trigger'] instanceof DateTime) {
+                if ($alarm['trigger'] instanceof DateTime || $alarm['trigger'] instanceof DateTimeImmutable) {
                     $va->add($this->datetime_prop($cal, 'TRIGGER', $alarm['trigger'], true, null, true));
                 }
                 else {
@@ -1236,7 +1236,7 @@ class libvcalendar implements Iterator
             if (!empty($val[3])) {
                 $va->add('TRIGGER', $val[3]);
             }
-            else if ($val[0] instanceof DateTime) {
+            else if ($val[0] instanceof DateTime || $val[0] instanceof DateTimeImmutable) {
                 $va->add($this->datetime_prop($cal, 'TRIGGER', $val[0], true, null, true));
             }
             $ve->add($va);
@@ -1384,7 +1384,7 @@ class libvcalendar implements Iterator
 
         if (!$from) $from = time();
         if (!$to)   $to = $from;
-        if (!$cal)  $cal = new VObject\Component\VCalendar();
+        if (!$cal)  $cal = new Sabre\VObject\Component\VCalendar();
 
         if (is_string($tzid)) {
             try {
@@ -1512,7 +1512,7 @@ class libvcalendar implements Iterator
  * Override Sabre\VObject\Property\Text that quotes commas in the location property
  * because Apple clients treat that property as list.
  */
-class vobject_location_property extends VObject\Property\Text
+class vobject_location_property extends Sabre\VObject\Property\Text
 {
     /**
      * List of properties that are considered 'structured'.

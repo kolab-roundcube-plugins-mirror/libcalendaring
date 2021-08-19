@@ -1096,7 +1096,7 @@ class Horde_Date
 
     protected function _initializeFromObject($date)
     {
-        if ($date instanceof DateTime) {
+        if ($date instanceof DateTime || $date instanceof DateTimeImmutable) {
             $this->_year  = (int)$date->format('Y');
             $this->_month = (int)$date->format('m');
             $this->_mday  = (int)$date->format('d');
