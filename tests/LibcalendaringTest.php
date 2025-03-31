@@ -21,9 +21,9 @@
  * along with this program. If not, see <http://www.gnu.org/licenses/>.
  */
 
-class libcalendaring_test extends PHPUnit\Framework\TestCase
+class LibcalendaringTest extends PHPUnit\Framework\TestCase
 {
-    function setUp()
+    public function setUp(): void
     {
         require_once __DIR__ . '/../libcalendaring.php';
     }
@@ -31,7 +31,7 @@ class libcalendaring_test extends PHPUnit\Framework\TestCase
     /**
      * libcalendaring::parse_alarm_value()
      */
-    function test_parse_alarm_value()
+    public function test_parse_alarm_value()
     {
         $alarm = libcalendaring::parse_alarm_value('-15M');
         $this->assertEquals('15', $alarm[0]);
@@ -39,11 +39,11 @@ class libcalendaring_test extends PHPUnit\Framework\TestCase
         $this->assertEquals('-PT15M', $alarm[3]);
 
         $alarm = libcalendaring::parse_alarm_value('-PT5H');
-        $this->assertEquals('5',  $alarm[0]);
+        $this->assertEquals('5', $alarm[0]);
         $this->assertEquals('-H', $alarm[1]);
 
         $alarm = libcalendaring::parse_alarm_value('P0DT1H0M0S');
-        $this->assertEquals('1',  $alarm[0]);
+        $this->assertEquals('1', $alarm[0]);
         $this->assertEquals('+H', $alarm[1]);
 
         // FIXME: this should return something like (1140 + 120 + 30)M
@@ -58,52 +58,52 @@ class libcalendaring_test extends PHPUnit\Framework\TestCase
     /**
      * libcalendaring::get_next_alarm()
      */
-    function test_get_next_alarm()
+    public function test_get_next_alarm()
     {
         // alarm 10 minutes before event
         $date = date('Ymd', strtotime('today + 2 days'));
-        $event = array(
+        $event = [
             'start' => new DateTime($date . 'T160000Z'),
             'end'   => new DateTime($date . 'T200000Z'),
-            'valarms' => array(
-                array(
+            'valarms' => [
+                [
                     'trigger' => '-PT10M',
                     'action'  => 'DISPLAY',
-                ),
-            ),
-        );
+                ],
+            ],
+        ];
         $alarm = libcalendaring::get_next_alarm($event);
         $this->assertEquals($event['valarms'][0]['action'], $alarm['action']);
         $this->assertEquals(strtotime($date . 'T155000Z'), $alarm['time']);
 
         // alarm 1 hour after event start
-        $event['valarms'] = array(
-            array(
+        $event['valarms'] = [
+            [
                 'trigger' => '+PT1H',
-            ),
-        );
+            ],
+        ];
         $alarm = libcalendaring::get_next_alarm($event);
         $this->assertEquals('DISPLAY', $alarm['action']);
         $this->assertEquals(strtotime($date . 'T170000Z'), $alarm['time']);
 
         // alarm 1 hour before event end
-        $event['valarms'] = array(
-            array(
+        $event['valarms'] = [
+            [
                 'trigger' => '-PT1H',
                 'related' => 'END',
-            ),
-        );
+            ],
+        ];
         $alarm = libcalendaring::get_next_alarm($event);
         $this->assertEquals('DISPLAY', $alarm['action']);
         $this->assertEquals(strtotime($date . 'T190000Z'), $alarm['time']);
 
         // alarm 1 hour after event end
-        $event['valarms'] = array(
-            array(
+        $event['valarms'] = [
+            [
                 'trigger' => 'PT1H',
                 'related' => 'END',
-            ),
-        );
+            ],
+        ];
         $alarm = libcalendaring::get_next_alarm($event);
         $this->assertEquals('DISPLAY', $alarm['action']);
         $this->assertEquals(strtotime($date . 'T210000Z'), $alarm['time']);
@@ -111,24 +111,24 @@ class libcalendaring_test extends PHPUnit\Framework\TestCase
         // ignore past alarms
         $event['start'] = new DateTime('today 22:00:00');
         $event['end']   = new DateTime('today 23:00:00');
-        $event['valarms'] = array(
-            array(
+        $event['valarms'] = [
+            [
                 'trigger' => '-P2D',
                 'action'  => 'EMAIL',
-            ),
-            array(
+            ],
+            [
                 'trigger' => '-PT30M',
                 'action'  => 'DISPLAY',
-            ),
-        );
+            ],
+        ];
         $alarm = libcalendaring::get_next_alarm($event);
         $this->assertEquals('DISPLAY', $alarm['action']);
         $this->assertEquals(strtotime('today 21:30:00'), $alarm['time']);
 
         // absolute alarm date/time
-        $event['valarms'] = array(
-            array('trigger' => new DateTime('today 20:00:00'))
-        );
+        $event['valarms'] = [
+            ['trigger' => new DateTime('today 20:00:00')],
+        ];
         $alarm = libcalendaring::get_next_alarm($event);
         $this->assertEquals($event['valarms'][0]['trigger']->format('U'), $alarm['time']);
 
@@ -141,9 +141,9 @@ class libcalendaring_test extends PHPUnit\Framework\TestCase
     /**
      * libcalendaring::part_is_vcalendar()
      */
-    function test_part_is_vcalendar()
+    public function test_part_is_vcalendar()
     {
-        $part = new StdClass;
+        $part = new StdClass();
         $part->mimetype = 'text/plain';
         $part->filename = 'event.ics';
 
@@ -165,20 +165,20 @@ class libcalendaring_test extends PHPUnit\Framework\TestCase
     /**
      * libcalendaring::to_rrule()
      */
-    function test_to_rrule()
+    public function test_to_rrule()
     {
-        $rrule = array(
+        $rrule = [
             'FREQ' => 'MONTHLY',
             'BYDAY' => '2WE',
             'INTERVAL' => 2,
             'UNTIL' => new DateTime('2025-05-01 18:00:00 CEST'),
-        );
+        ];
 
         $s = libcalendaring::to_rrule($rrule);
 
-        $this->assertRegExp('/FREQ='.$rrule['FREQ'].'/',          $s, "Recurrence Frequence");
-        $this->assertRegExp('/INTERVAL='.$rrule['INTERVAL'].'/',  $s, "Recurrence Interval");
-        $this->assertRegExp('/BYDAY='.$rrule['BYDAY'].'/',        $s, "Recurrence BYDAY");
-        $this->assertRegExp('/UNTIL=20250501T160000Z/',           $s, "Recurrence End date (in UTC)");
+        $this->assertMatchesRegularExpression('/FREQ=' . $rrule['FREQ'] . '/', $s, "Recurrence Frequence");
+        $this->assertMatchesRegularExpression('/INTERVAL=' . $rrule['INTERVAL'] . '/', $s, "Recurrence Interval");
+        $this->assertMatchesRegularExpression('/BYDAY=' . $rrule['BYDAY'] . '/', $s, "Recurrence BYDAY");
+        $this->assertMatchesRegularExpression('/UNTIL=20250501T160000Z/', $s, "Recurrence End date (in UTC)");
     }
 }

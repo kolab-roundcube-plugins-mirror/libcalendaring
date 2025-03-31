@@ -11,6 +11,6 @@ Provides utility functions for calendar-related modules such as
 iCal parsing and exporting is done with the help of the Sabre VObject
 library [1]. It needs to be insalled with Roundcube using composer:
 
-  $ composer require "sabre/vobject" "~3.3.3"
+  $ composer require "sabre/vobject" "~4.5.1"
 
 [1]: http://sabre.io/vobject/

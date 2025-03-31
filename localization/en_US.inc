@@ -8,7 +8,7 @@
  * For translation see https://www.transifex.com/projects/p/kolab/resource/libcalendaring/
  */
 
-$labels = array();
+$labels = [];
 
 // words for spoken dates
 $labels['until'] = 'until';
@@ -190,4 +190,3 @@ $labels['expandattendeegroup'] = 'Substitute with group members';
 $labels['expandattendeegroupnodata'] = 'Unable to substitute this group. No members found.';
 $labels['expandattendeegrouperror'] = 'Unable to substitute this group. It might contain too many members.';
 $labels['expandattendeegroupsizelimit'] = 'This group contains too many members for substituting.';
-

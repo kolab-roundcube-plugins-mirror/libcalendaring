@@ -1,13 +1,16 @@
 <?php
 
+use Sabre\VObject\Recur\EventIterator;
+use Sabre\VObject\Recur\NoInstancesException;
+
 /**
- * Recurrence computation class for shared use
+ * Recurrence computation class for shared use.
  *
- * Uitility class to compute reccurrence dates from the given rules
+ * Uitility class to compute recurrence dates from the given rules.
  *
- * @author Thomas Bruederli <bruederli@kolabsys.com>
+ * @author Aleksander Machniak <machniak@apheleia-it.ch
  *
- * Copyright (C) 2012-2014, Kolab Systems AG <contact@kolabsys.com>
+ * Copyright (C) 2012-2022, Apheleia IT AG <contact@apheleia-it.ch>
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU Affero General Public License as
@@ -26,210 +29,290 @@ class libcalendaring_recurrence
 {
     protected $lib;
     protected $start;
-    protected $next;
     protected $engine;
     protected $recurrence;
     protected $dateonly = false;
-    protected $hour = 0;
+    protected $event;
+    protected $duration;
+    protected $isStart = true;
 
     /**
      * Default constructor
      *
-     * @param object calendar The calendar plugin instance
+     * @param libcalendaring $lib   The libcalendaring plugin instance
+     * @param array          $event The event object to operate on
      */
-    function __construct($lib)
+    public function __construct($lib, $event = null)
     {
-      // use Horde classes to compute recurring instances
-      // TODO: replace with something that has less than 6'000 lines of code
-      require_once(__DIR__ . '/Horde_Date_Recurrence.php');
+        $this->lib   = $lib;
+        $this->event = $event;
 
-      $this->lib = $lib;
+        if (!empty($event)) {
+            if (!empty($event['start']) && is_object($event['start'])
+                && !empty($event['end']) && is_object($event['end'])
+            ) {
+                $this->duration = $event['start']->diff($event['end']);
+            }
+
+            $this->init($event['recurrence'], $event['start']);
+        }
     }
 
     /**
      * Initialize recurrence engine
      *
-     * @param array  The recurrence properties
-     * @param object DateTime The recurrence start date
+     * @param array    $recurrence The recurrence properties
+     * @param DateTime $start      The recurrence start date
      */
-    public function init($recurrence, $start = null)
+    public function init($recurrence, $start)
     {
+        $this->start      = $start;
+        $this->dateonly   = !empty($start->_dateonly) || !empty($this->event['allday']);
         $this->recurrence = $recurrence;
 
-        $this->engine = new Horde_Date_Recurrence($start);
-        $this->engine->fromRRule20(libcalendaring::to_rrule($recurrence));
+        $event = [
+            'uid' => '1',
+            'allday' => $this->dateonly,
+            'recurrence' => $recurrence,
+            'start' => $start,
+            // TODO: END/DURATION ???
+            // TODO: moved occurrences ???
+        ];
 
-        $this->set_start($start);
+        $vcalendar = new libcalendaring_vcalendar($this->lib->timezone);
 
-        if (!empty($recurrence['EXDATE'])) {
-            foreach ((array) $recurrence['EXDATE'] as $exdate) {
-                if (is_a($exdate, 'DateTime')) {
-                    $this->engine->addException($exdate->format('Y'), $exdate->format('n'), $exdate->format('j'));
-                }
-            }
-        }
-        if (!empty($recurrence['RDATE'])) {
-            foreach ((array) $recurrence['RDATE'] as $rdate) {
-                if (is_a($rdate, 'DateTime')) {
-                    $this->engine->addRDate($rdate->format('Y'), $rdate->format('n'), $rdate->format('j'));
-                }
-            }
+        $ve = $vcalendar->toSabreComponent($event);
+
+        try {
+            $this->engine = new EventIterator($ve, null, $this->lib->timezone);
+        } catch (NoInstancesException $e) {
+            // We treat a non-recurring event silently
+            // TODO: What about other exceptions?
         }
     }
 
     /**
-     * Setter for (new) recurrence start date
+     * Get date/time of the next occurence of this event, and push the iterator.
      *
-     * @param object DateTime The recurrence start date
+     * @return libcalendaring_datetime|false object or False if recurrence ended
      */
-    public function set_start($start)
+    public function next_start()
     {
-        $this->start = $start;
-        $this->dateonly = $start->_dateonly;
-        $this->next = new Horde_Date($start, $this->lib->timezone->getName());
-        $this->hour = $this->next->hour;
-        $this->engine->setRecurStart($this->next);
-    }
-
-    /**
-     * Get date/time of the next occurence of this event
-     *
-     * @return mixed DateTime object or False if recurrence ended
-     */
-    public function next()
-    {
-        $time = false;
-        $after = clone $this->next;
-        $after->mday = $after->mday + 1;
-        if ($this->next && ($next = $this->engine->nextActiveRecurrence($after))) {
-            // avoid endless loops if recurrence computation fails
-            if (!$next->after($this->next)) {
-                return false;
-            }
-            // fix time for all-day events
-            if ($this->dateonly) {
-                $next->hour = $this->hour;
-                $next->min = 0;
-            }
-
-            $time = $next->toDateTime();
-            $this->next = $next;
+        if (empty($this->engine)) {
+            return false;
         }
 
-        return $time;
+        try {
+            $this->engine->next();
+            $current = $this->engine->getDtStart();
+        } catch (Exception $e) {
+            // do nothing
+        }
+
+        return !empty($current) ? $this->toDateTime($current) : false;
     }
 
     /**
-     * Get the end date of the occurence of this recurrence cycle
+     * Get the next recurring instance of this event
      *
-     * @return DateTime|bool End datetime of the last occurence or False if recurrence exceeds limit
+     * @return array|false Array with event properties or False if recurrence ended
+     */
+    public function next_instance()
+    {
+        if (empty($this->engine)) {
+            return false;
+        }
+
+        // Here's the workaround for an issue for an event with its start date excluded
+        // E.g. A daily event starting on 10th which is one of EXDATE dates
+        // should return 11th as next_instance() when called for the first time.
+        // Looks like Sabre is setting internal "current date" to 11th on such an object
+        // initialization, therefore calling next() would move it to 12th.
+        if ($this->isStart && ($next_start = $this->engine->getDtStart())
+            && $next_start->format('Ymd') != $this->start->format('Ymd')
+        ) {
+            $next_start = $this->toDateTime($next_start);
+        } else {
+            $next_start = $this->next_start();
+        }
+
+        $this->isStart = false;
+
+        if ($next_start) {
+            $next = $this->event;
+            $next['start'] = $next_start;
+
+            if ($this->duration) {
+                $next['end'] = clone $next_start;
+                $next['end']->add($this->duration);
+            }
+
+            $next['recurrence_date'] = clone $next_start;
+            $next['_instance'] = libcalendaring::recurrence_instance_identifier($next);
+
+            unset($next['_formatobj']);
+
+            return $next;
+        }
+
+        return false;
+    }
+
+    /**
+     * Get the date of the end of the last occurrence of this recurrence cycle
+     *
+     * @return libcalendaring_datetime|false End datetime of the last occurrence or False if there's no end date
      */
     public function end()
     {
+        if (empty($this->engine)) {
+            return $this->toDateTime($this->start);
+        }
+
         // recurrence end date is given
-        if ($this->recurrence['UNTIL'] instanceof DateTime) {
-            return $this->recurrence['UNTIL'];
+        if (isset($this->recurrence['UNTIL']) && $this->recurrence['UNTIL'] instanceof DateTimeInterface) {
+            return $this->toDateTime($this->recurrence['UNTIL']);
         }
 
-        // take the last RDATE entry if set
-        if (is_array($this->recurrence['RDATE']) && !empty($this->recurrence['RDATE'])) {
-            $last = end($this->recurrence['RDATE']);
-            if ($last instanceof DateTime) {
-              return $last;
+        // Run through all items till we reach the end, or limit of iterations
+        // Note: Sabre has a limits of iteration in VObject\Settings, so it is not an infinite loop
+        try {
+            foreach ($this->engine as $end) {
+                // do nothing
             }
+        } catch (Exception $e) {
+            // do nothing
         }
 
-        // run through all items till we reach the end
-        if ($this->recurrence['COUNT']) {
-            $last = $this->start;
-            $this->next = new Horde_Date($this->start, $this->lib->timezone->getName());
-            while (($next = $this->next()) && $c < 1000) {
-                $last = $next;
-                $c++;
-            }
+        /*
+        if (empty($end) && isset($this->event['start']) && $this->event['start'] instanceof DateTimeInterface) {
+            // determine a reasonable end date if none given
+            $end = clone $this->event['start'];
+            $end->add(new DateInterval('P100Y'));
         }
+        */
 
-        return $last;
+        return isset($end) ? $this->toDateTime($end) : false;
     }
 
     /**
      * Find date/time of the first occurrence (excluding start date)
+     *
+     * @return libcalendaring_datetime|null First occurrence
      */
     public function first_occurrence()
     {
-        $start      = clone $this->start;
-        $orig_start = clone $this->start;
-        $r          = $this->recurrence;
-        $interval   = !empty($r['INTERVAL']) ? intval($r['INTERVAL']) : 1;
-        $frequency  = isset($this->recurrence['FREQ']) ? $this->recurrence['FREQ'] : null;
-
-        switch ($frequency) {
-        case 'WEEKLY':
-            if (empty($this->recurrence['BYDAY'])) {
-                return $start;
-            }
-
-            $start->sub(new DateInterval("P{$interval}W"));
-            break;
-
-        case 'MONTHLY':
-            if (empty($this->recurrence['BYDAY']) && empty($this->recurrence['BYMONTHDAY'])) {
-                return $start;
-            }
-
-            $start->sub(new DateInterval("P{$interval}M"));
-            break;
-
-        case 'YEARLY':
-            if (empty($this->recurrence['BYDAY']) && empty($this->recurrence['BYMONTH'])) {
-                return $start;
-            }
-
-            $start->sub(new DateInterval("P{$interval}Y"));
-            break;
-
-        default:
-            return $start;
+        if (empty($this->engine)) {
+            return $this->toDateTime($this->start);
         }
 
-        $r = $this->recurrence;
-        $r['INTERVAL'] = $interval;
-        if (!empty($r['COUNT'])) {
+        $start    = clone $this->start;
+        $interval = $this->recurrence['INTERVAL'] ?? 1;
+        $freq     = $this->recurrence['FREQ'] ?? null;
+
+        switch ($freq) {
+            case 'WEEKLY':
+                if (empty($this->recurrence['BYDAY'])) {
+                    return $start;
+                }
+
+                $start->sub(new DateInterval("P{$interval}W"));
+                break;
+
+            case 'MONTHLY':
+                if (empty($this->recurrence['BYDAY']) && empty($this->recurrence['BYMONTHDAY'])) {
+                    return $start;
+                }
+
+                $start->sub(new DateInterval("P{$interval}M"));
+                break;
+
+            case 'YEARLY':
+                if (empty($this->recurrence['BYDAY']) && empty($this->recurrence['BYMONTH'])) {
+                    return $start;
+                }
+
+                $start->sub(new DateInterval("P{$interval}Y"));
+                break;
+
+            case 'DAILY':
+                if (!empty($this->recurrence['BYMONTH'])) {
+                    break;
+                }
+
+                // no break
+            default:
+                return $start;
+        }
+
+        $recurrence = $this->recurrence;
+
+        if (!empty($recurrence['COUNT'])) {
             // Increase count so we do not stop the loop to early
-            $r['COUNT'] += 100;
+            $recurrence['COUNT'] += 100;
         }
 
         // Create recurrence that starts in the past
-        $recurrence = new self($this->lib);
-        $recurrence->init($r, $start);
+        $self = new self($this->lib);
+        $self->init($recurrence, $start);
+
+        // TODO: This method does not work the same way as the kolab_date_recurrence based on
+        //       kolabcalendaring. I.e. if an event start date does not match the recurrence rule
+        //       it will be returned, kolab_date_recurrence will return the next occurrence in such a case
+        //       which is the intended result of this function.
+        //       See some commented out test cases in tests/RecurrenceTest.php
 
         // find the first occurrence
         $found = false;
-        while ($next = $recurrence->next()) {
+        while ($next = $self->next_start()) {
             $start = $next;
-            if ($next >= $orig_start) {
+            if ($next >= $this->start) {
                 $found = true;
                 break;
             }
         }
 
         if (!$found) {
-            rcube::raise_error(array(
-                'file' => __FILE__,
-                'line' => __LINE__,
-                'message' => sprintf("Failed to find a first occurrence. Start: %s, Recurrence: %s",
-                    $orig_start->format(DateTime::ISO8601), json_encode($r)),
-            ), true);
+            rcube::raise_error(
+                [
+                    'file' => __FILE__, 'line' => __LINE__,
+                    'message' => sprintf(
+                        "Failed to find a first occurrence. Start: %s, Recurrence: %s",
+                        $this->start->format(DateTime::ISO8601),
+                        json_encode($recurrence)
+                    ),
+                ],
+                true
+            );
 
             return null;
         }
 
-        if ($start Instanceof Horde_Date) {
-            $start = $start->toDateTime();
+        return $this->toDateTime($start);
+    }
+
+    /**
+     * Convert any DateTime into libcalendaring_datetime
+     */
+    protected function toDateTime($date, $useStart = true)
+    {
+        if ($date instanceof DateTimeInterface) {
+            $date = libcalendaring_datetime::createFromFormat(
+                'Y-m-d\\TH:i:s',
+                $date->format('Y-m-d\\TH:i:s'),
+                // Sabre will loose timezone on all-day events, use the event start's timezone
+                $this->start->getTimezone()
+            );
         }
 
-        $start->_dateonly = $this->dateonly;
+        $date->_dateonly = $this->dateonly;
 
-        return $start;
+        if ($useStart && $this->dateonly) {
+            // Sabre sets time to 00:00:00 for all-day events,
+            // let's copy the time from the event's start
+            $date->setTime((int) $this->start->format('H'), (int) $this->start->format('i'), (int) $this->start->format('s'));
+        }
+
+        return $date;
     }
 }

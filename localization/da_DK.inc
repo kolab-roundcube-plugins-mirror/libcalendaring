@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Localizations for the Kolab calendaring utilities plugin
  *
@@ -22,6 +23,18 @@ $labels['trigger-D'] = 'dage før';
 $labels['trigger+M'] = 'minutter efter';
 $labels['trigger+H'] = 'timer efter';
 $labels['trigger+D'] = 'dage efter';
+$labels['triggerend-M'] = 'minutter før afslutning';
+$labels['triggerend-H'] = 'timer før afslutning';
+$labels['triggerend-D'] = 'dage før afslutning';
+$labels['triggerend+M'] = 'minutter efter afslutning';
+$labels['triggerend+H'] = 'timer efter afslutning';
+$labels['triggerend+D'] = 'dage efter afslutning';
+$labels['trigger0'] = 'på tidspunktet';
+$labels['triggerattime'] = 'ved starttidspunktet';
+$labels['triggerattimeend'] = 'ved sluttidspunktet';
+$labels['relatedstart'] = 'start';
+$labels['relatedendevent'] = 'slut';
+$labels['relatedendtask'] = 'passende tidspunkt';
 $labels['addalarm'] = 'Tilføj alarm';
 $labels['removealarm'] = 'Fjern alarm';
 $labels['alarmtitle'] = 'Kommende arrangementer';
@@ -58,6 +71,8 @@ $labels['forever'] = 'for altid';
 $labels['recurrencend'] = 'indtil';
 $labels['untilenddate'] = 'indtil datoen';
 $labels['forntimes'] = 'for $nr gang(e)'; // old
+$labels['ntimes'] = '$n gang(e)';
+$labels['for'] = 'til';
 $labels['first'] = 'første';
 $labels['second'] = 'anden';
 $labels['third'] = 'tredje';
@@ -70,6 +85,7 @@ $labels['statusorganizer'] = 'Organisator';
 $labels['statusaccepted'] = 'Accepteret';
 $labels['statustentative'] = 'Forsøgsvis';
 $labels['statusdeclined'] = 'Afvist';
+$labels['statusdelegated'] = 'Delegeret';
 $labels['statusneeds-action'] = 'Needs action';
 $labels['statusunknown'] = 'Ukendt';
 $labels['statuscompleted'] = 'Completed';
@@ -141,6 +157,8 @@ $labels['delegateinvitation'] = 'Delegér invitation';
 $labels['delegateto'] = 'Delegér til';
 $labels['delegatersvpme'] = 'Hold mig orienteret om opdateringer vedrørende denne hændelse';
 $labels['delegateinvalidaddress'] = 'Angiv venligst en gyldig e-mailadresse for den delegerede';
+$labels['delegatedto'] = 'Delegeret til:';
+$labels['delegatedfrom'] = 'Delegeret fra:';
 $labels['savingdata'] = 'Gemmer data...';
 $labels['savein'] = 'Gem i';
 $labels['expandattendeegroup'] = 'Substituér med gruppemedlemmer';

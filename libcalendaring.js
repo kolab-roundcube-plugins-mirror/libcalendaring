@@ -71,6 +71,15 @@ function rcube_libcalendaring(settings)
     };
 
     /**
+     * Convert Moment.js object into a Date object
+     */
+    this.moment2date = function(moment)
+    {
+        // Moment.toDate() is different regarding timezone handling
+        return new Date(moment.format('YYYY-MM-DD[T]HH:mm:ss'));
+    };
+
+    /**
      * Create a nice human-readable string for the date/time range
      */
     this.event_date_text = function(event, voice)
@@ -81,8 +90,8 @@ function rcube_libcalendaring(settings)
         event.end = event.start;
 
       // Support Moment.js objects
-      var start = 'toDate' in event.start ? event.start.toDate() : event.start,
-        end = event.end && 'toDate' in event.end ? event.end.toDate() : event.end;
+      var start = 'toDate' in event.start ? this.moment2date(event.start) : event.start,
+        end = event.end && 'toDate' in event.end ? this.moment2date(event.end) : event.end;
 
       var fromto, duration = end.getTime() / 1000 - start.getTime() / 1000,
         until = voice ? ' ' + rcmail.gettext('until','libcalendaring') + ' ' : ' — ';
@@ -258,18 +267,19 @@ function rcube_libcalendaring(settings)
      */
     this.format_datetime = function(date, mode, voice)
     {
-        var res = '';
+        var res = [];
+
         if (!mode || mode == 1) {
-          res += $.datepicker.formatDate(voice ? 'MM d yy' : this.datepicker_settings.dateFormat, date, this.datepicker_settings);
+          res.push($.datepicker.formatDate(voice ? 'MM d yy' : this.datepicker_settings.dateFormat, date, this.datepicker_settings));
         }
-        if (!mode) {
-            res += voice ? ' ' + rcmail.gettext('at','libcalendaring') + ' ' : ' ';
+        if (!mode && voice) {
+            res.push(rcmail.gettext('at','libcalendaring'));
         }
         if (!mode || mode == 2) {
-            res += this.format_time(date, voice);
+            res.push(this.format_time(date, voice));
         }
 
-        return res;
+        return res.join(' ');
     }
 
     /**
@@ -293,6 +303,7 @@ function rcube_libcalendaring(settings)
 
         var i, i2, c, formatter, res = '',
           format = voice ? settings['time_format'].replace(':',' ').replace('HH','H').replace('hh','h').replace('mm','m').replace('ss','s') : settings['time_format'];
+
         for (i=0; i < format.length; i++) {
             c = format.charAt(i);
             for (i2=Math.min(i+2, format.length); i2 > i; i2--) {
@@ -371,7 +382,7 @@ function rcube_libcalendaring(settings)
      */
     this.text2html = function(str, maxlen, maxlines)
     {
-        var html = Q(String(str));
+        var html = Q($.trim(String(str)));
 
         // limit visible text length
         if (maxlen) {
@@ -411,21 +422,35 @@ function rcube_libcalendaring(settings)
 
         // simple link parser (similar to rcube_string_replacer class in PHP)
         var utf_domain = '[^?&@"\'/\\(\\)\\s\\r\\t\\n]+\\.([^\x00-\x2f\x3b-\x40\x5b-\x60\x7b-\x7f]{2,}|xn--[a-z0-9]{2,})';
-        var url1 = '.:;,', url2 = 'a-z0-9%=#@+?&/_~\\[\\]-';
+        var url1 = '.;,', url2 = 'a-z0-9%=:#@+?&/_~\\[\\]-';
         var link_pattern = new RegExp('([hf]t+ps?://)('+utf_domain+'(['+url1+']?['+url2+']+)*)', 'ig');
         var mailto_pattern = new RegExp('([^\\s\\n\\(\\);]+@'+utf_domain+')', 'ig');
         var link_replace = function(matches, p1, p2) {
-          var title = '', text = p2;
-          if (p2 && p2.length > 55) {
-            text = p2.substr(0, 45) + '...' + p2.substr(-8);
-            title = p1 + p2;
+          var title = '', suffix = '';
+          if (p2 && p2.substr(-3) == '&gt') {
+            suffix = '&gt';
+            p2 = p2.substr(0, p2.length - 3);
           }
-          return '<a href="'+p1+p2+'" class="extlink" target="_blank" title="'+title+'">'+p1+text+'</a>'
+          var href = p1 + p2;
+          if (p2 && p2.length > 55) {
+            title = p1 + p2;
+            p2 = p2.substr(0, 45) + '...' + p2.substr(-8);
+          }
+
+          return '<a href="'+href+'" class="extlink" target="_blank" title="'+title+'">' + p1 + p2 + '</a>' + suffix
+        };
+
+        var mailto_replace = function(matches, p1, p2) {
+          // ignore links (created in link_replace() above
+          if (matches.match(/^(title|href)=/))
+            return matches;
+          else
+            return '<a href="mailto:' + p1 + '">' + p1 + '</a>';
         };
 
         return html
             .replace(link_pattern, link_replace)
-            .replace(mailto_pattern, '<a href="mailto:$1">$1</a>')
+            .replace(mailto_pattern, mailto_replace)
             .replace(/(mailto:)([^"]+)"/g, '$1$2" onclick="rcmail.command(\'compose\', \'$2\');return false"')
             .replace(/\n/g, "<br/>");
     };
@@ -1294,7 +1319,8 @@ rcube_libcalendaring.itip_delegate_dialog = function(callback, selector)
         width: 460,
         open: function(event, ui) {
             $(this).parent().find('button:not(.ui-dialog-titlebar-close)').first().addClass('mainaction');
-            $(this).find('#itip-saveto').val('');
+            $(this).find('#itip-saveto').val('')
+                .click(function(e) { e.stopPropagation(); }) // fixes a bug on click (in Elastic)
 
             // initialize autocompletion
             var ac_props, rcm = rcmail.is_framed() ? parent.rcmail : rcmail;
