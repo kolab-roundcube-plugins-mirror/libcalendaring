@@ -946,7 +946,7 @@ class libcalendaring_vcalendar implements Iterator
 
         if ($dt) {
             if ($utc) {
-                $dt->setTimeZone(new DateTimeZone('UTC'));
+                $dt = $dt->setTimeZone(new DateTimeZone('UTC'));
                 $is_utc = true;
             } else {
                 $is_utc = ($tz = $dt->getTimezone()) && in_array($tz->getName(), ['UTC','GMT','Z']);
