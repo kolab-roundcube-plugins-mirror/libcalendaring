@@ -1460,6 +1460,14 @@ class libcalendaring_vcalendar implements Iterator
             if (count($more_transitions) > 1) {
                 $index  = count($more_transitions) - 2;
                 $tzfrom = $more_transitions[$index]['offset'] / 3600;
+
+                // The period holds no transition, so $transitions[0] only describes the
+                // state at its start: its 'time' is that boundary, not a change. Setting
+                // $tzfrom above defeats the !isset($tzfrom) guard below that would have
+                // skipped it, so it would be written as a STANDARD dated inside the
+                // exported period — a change that never happened, with every earlier
+                // datetime resolving at TZOFFSETFROM. Hand the loop the real one instead.
+                $transitions = [$more_transitions[$index + 1]];
             }
         }
 

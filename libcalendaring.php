@@ -1346,7 +1346,19 @@ class libcalendaring extends rcube_plugin
             $object['_savemode'] = !empty($object['thisandfuture']) ? 'future' : 'current';
         } elseif (!empty($object['recurrence_id']) && !empty($object['_instance'])) {
             if (strlen($object['_instance']) > 4) {
-                $object['recurrence_date'] = rcube_utils::anytodatetime($object['_instance'], $object['start']->getTimezone());
+                // The identifier carries no offset, so it can only be read back in the zone
+                // it was written in. A trailing Z marks the ones written in UTC by
+                // recurrence_instance_identifier(); anything else predates that and is
+                // still read against the event's own start, so identifiers already in a
+                // store keep the meaning they have today.
+                if (substr($object['_instance'], -1) === 'Z') {
+                    $object['recurrence_date'] = rcube_utils::anytodatetime(
+                        substr($object['_instance'], 0, -1),
+                        new DateTimeZone('UTC')
+                    );
+                } else {
+                    $object['recurrence_date'] = rcube_utils::anytodatetime($object['_instance'], $object['start']->getTimezone());
+                }
             } else {
                 $object['recurrence_date'] = clone $object['start'];
             }
@@ -1384,7 +1396,18 @@ class libcalendaring extends rcube_plugin
                 $allday = !empty($event['allday']);
             }
 
-            return $instance_date->format($allday ? 'Ymd' : 'Ymd\THis');
+            if ($allday) {
+                return $instance_date->format('Ymd');
+            }
+
+            // Normalise to UTC and say so. The identifier is persisted and later read back
+            // in a different context, where the only zone available is the event's own
+            // start — which is not necessarily the zone this was formatted in. Writing the
+            // instant instead of a local wall clock makes the round trip lossless; the Z
+            // tells identify_recurrence_instance() which of the two it is holding.
+            return DateTimeImmutable::createFromFormat('U', $instance_date->format('U'))
+                ->setTimezone(new DateTimeZone('UTC'))
+                ->format('Ymd\THis\Z');
         }
     }
 
